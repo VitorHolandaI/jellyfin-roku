@@ -10,8 +10,8 @@ sub init()
     m.value.width = 440
 
     m.name.color = ColorPalette.WHITE
-    m.value.textColor = ColorPalette.DARKGREY
-    m.value.hintTextColor = ColorPalette.MIDGREY
+    m.value.textColor = ColorPalette.WHITE
+    m.value.hintTextColor = "#8fa0c8"
 
     m.name.width = 240
     m.name.height = 75

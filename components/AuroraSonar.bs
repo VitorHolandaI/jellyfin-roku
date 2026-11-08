@@ -1,0 +1,16 @@
+' Sonar de busca: dois aneis com o degradê da marca que expandem e somem,
+' defasados em meio ciclo. Liga/desliga pelo campo `running`.
+
+sub onRunningChange()
+    pulseA = m.top.findNode("pulseA")
+    pulseB = m.top.findNode("pulseB")
+    if m.top.running
+        m.top.visible = true
+        pulseA.control = "start"
+        pulseB.control = "start"
+    else
+        pulseA.control = "stop"
+        pulseB.control = "stop"
+        m.top.visible = false
+    end if
+end sub

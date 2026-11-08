@@ -8,7 +8,7 @@ sub init()
     m.trashContainer = m.top.findNode("trashContainer")
     m.baseUrl = m.top.findNode("baseUrl")
     m.labels = m.top.findNode("labels")
-    m.background.color = m.top.itemHasFocus ? ColorPalette.HIGHLIGHT : ColorPalette.ELEMENTBACKGROUND
+    applyBackground(m.top.itemHasFocus)
 
     setTextColor()
 end sub
@@ -46,11 +46,24 @@ sub setBackground()
     if not isValid(m.top.itemContent.itemHasDeleteFocus) then return
 
     if m.top.itemContent.itemHasDeleteFocus
-        m.background.color = ColorPalette.MIDGREY
+        m.background.uri = "pkg:/images/brand/pill.9.png"
+        m.background.blendColor = ColorPalette.MIDGREY
         return
     end if
 
-    m.background.color = m.top.itemHasFocus ? ColorPalette.HIGHLIGHT : ColorPalette.ELEMENTBACKGROUND
+    applyBackground(m.top.itemHasFocus)
+end sub
+
+' Foco = pastilha com o degradê da marca; sem foco = pastilha branca quase
+' transparente. Troca a imagem (nao a cor) porque o degradê vem pronto no PNG.
+sub applyBackground(focused as boolean)
+    if focused
+        m.background.uri = "pkg:/images/brand/pill-gradient.9.png"
+        m.background.blendColor = "0xFFFFFFFF"
+    else
+        m.background.uri = "pkg:/images/brand/pill.9.png"
+        m.background.blendColor = "0xFFFFFF14"
+    end if
 end sub
 
 sub setDeleteFocus()

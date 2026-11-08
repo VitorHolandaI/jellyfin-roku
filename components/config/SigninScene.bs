@@ -36,14 +36,14 @@ sub init()
     m.profileImage.observeField("loadStatus", "onPosterLoadStatusChanged")
 
     m.submit = m.top.findNode("submit")
-    m.submit.background = ColorPalette.LIGHTBLUE
-    m.submit.color = ColorPalette.DARKGREY
-    m.submit.focusBackground = ColorPalette.HIGHLIGHT
+    m.submit.background = ColorPalette.HIGHLIGHT
+    m.submit.color = ColorPalette.WHITE
+    m.submit.focusBackground = "#00A4DC"
     m.submit.focusColor = ColorPalette.WHITE
 
     m.quickConnect = m.top.findNode("quickConnect")
-    m.quickConnect.background = ColorPalette.LIGHTBLUE
-    m.quickConnect.color = ColorPalette.DARKGREY
+    m.quickConnect.background = "0xFFFFFF26"
+    m.quickConnect.color = ColorPalette.WHITE
     m.quickConnect.focusBackground = ColorPalette.HIGHLIGHT
     m.quickConnect.focusColor = ColorPalette.WHITE
 
@@ -51,7 +51,8 @@ sub init()
     m.errorContainer.color = "#CC0000"
 
     m.config = m.top.findNode("configOptions")
-    m.config.focusBitmapBlendColor = ColorPalette.HIGHLIGHT
+    m.config.focusBitmapUri = "pkg:/images/brand/pill-gradient.9.png"
+    m.config.focusBitmapBlendColor = "0xFFFFFFFF"
     m.config.focusFootprintBlendColor = ColorPalette.TRANSPARENT
     ' When the last form field is confirmed, jump focus straight to Submit
     m.config.observeField("allFieldsSubmitted", "onAllFieldsSubmitted")

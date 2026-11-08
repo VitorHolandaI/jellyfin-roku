@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="AuroraBackground" extends="Group">
+  <children>
+    <Rectangle id="base" width="1920" height="1080" color="#02061A" />
+
+    <Poster id="blobPurple" uri="pkg:/images/brand/aurora-purple.png" width="900" height="900" translation="[-220,-260]" opacity="0.5" />
+    <Poster id="blobCyan" uri="pkg:/images/brand/aurora-cyan.png" width="900" height="900" translation="[1050,520]" opacity="0.42" />
+    <Poster id="blobBlue" uri="pkg:/images/brand/aurora-blue.png" width="900" height="900" translation="[650,-420]" opacity="0.38" />
+
+    <Animation id="driftPurple" duration="24" repeat="true" easeFunction="inOutQuad">
+      <Vector2DFieldInterpolator key="[0.0, 0.5, 1.0]" keyValue="[[-220,-260],[120,-60],[-220,-260]]" fieldToInterp="blobPurple.translation" />
+    </Animation>
+    <Animation id="driftCyan" duration="28" repeat="true" easeFunction="inOutQuad">
+      <Vector2DFieldInterpolator key="[0.0, 0.5, 1.0]" keyValue="[[1050,520],[760,300],[1050,520]]" fieldToInterp="blobCyan.translation" />
+    </Animation>
+    <Animation id="driftBlue" duration="32" repeat="true" easeFunction="inOutQuad">
+      <Vector2DFieldInterpolator key="[0.0, 0.5, 1.0]" keyValue="[[650,-420],[900,-250],[650,-420]]" fieldToInterp="blobBlue.translation" />
+    </Animation>
+  </children>
+</component>

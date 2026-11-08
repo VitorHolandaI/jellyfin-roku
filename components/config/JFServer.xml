@@ -7,7 +7,7 @@
   </interface>
 
   <children>
-    <Rectangle id="background" translation="[0,0]" width="1460" height="100" />
+    <Poster id="background" uri="pkg:/images/brand/pill.9.png" translation="[0,0]" width="1460" height="100" blendColor="0xFFFFFF14" />
 
     <Poster id="poster" translation="[20,5]" width="90" height="90" />
     <Group id="labels" translation="[120,0]">

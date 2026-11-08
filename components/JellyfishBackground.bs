@@ -1,0 +1,118 @@
+' Fundo de "fossa abissal": aguas-vivas bioluminescentes de varios tamanhos
+' vagando devagar, aparecendo e sumindo. Cada uma tem um Poster e duas
+' animacoes criadas em codigo: deriva + fade (linear) e pulso + balanco.
+'
+' Profundidade 0 = longe (pequena, lenta, fraca); 1 = perto (grande, forte).
+
+const jellyCount = 9
+
+sub init()
+    ' especies registradas no Brasil/Nordeste (ver scripts/gen-jellyfish-sprites.py);
+    ' peso = frequencia no fundo, escala = tamanho relativo da especie
+    m.species = [
+        { name: "chrysaora", weight: 3, scale: 1.0 },
+        { name: "lychnorhiza", weight: 2, scale: 1.25 },
+        { name: "phyllorhiza", weight: 2, scale: 1.0 },
+        { name: "stomolophus", weight: 2, scale: 0.7 },
+        { name: "chiropsalmus", weight: 2, scale: 0.85 },
+        { name: "olindias", weight: 2, scale: 0.9 },
+        { name: "physalia", weight: 1, scale: 0.9 }
+    ]
+    for index = 0 to jellyCount - 1
+        ' profundidade crescente com ruido: as mais proximas ficam por cima
+        depth = (index + Rnd(0) * 0.9) / jellyCount
+        spawnJelly(index, pickSpecies(), depth)
+    end for
+end sub
+
+function pickSpecies() as object
+    total = 0
+    for each candidate in m.species
+        total += candidate.weight
+    end for
+    roll = Rnd(total)
+    for each candidate in m.species
+        roll -= candidate.weight
+        if roll <= 0 then return candidate
+    end for
+    return m.species[0]
+end function
+
+' As grandes saem da faixa central para nao cobrir o formulario.
+function pickStartX(width as float) as float
+    if width < 190
+        return randomBetween(-width * 0.2, 1920 - width * 0.8)
+    end if
+    if Rnd(2) = 1
+        return randomBetween(-width * 0.3, 430 - width)
+    end if
+    return randomBetween(1490, 1920 - width * 0.6)
+end function
+
+function randomBetween(low as float, high as float) as float
+    return low + Rnd(0) * (high - low)
+end function
+
+sub spawnJelly(index as integer, species as object, depth as float)
+    id = "jelly" + index.toStr()
+    width = (70 + depth * depth * 300) * species.scale
+    height = width * 1.6
+    peakOpacity = 0.26 + depth * 0.42
+    driftSeconds = 140 - depth * 60 + randomBetween(0, 25)
+
+    poster = m.top.createChild("Poster")
+    poster.id = id
+    poster.uri = "pkg:/images/brand/jelly-" + species.name + ".png"
+    poster.width = width
+    poster.height = height
+    poster.opacity = 0
+    poster.scaleRotateCenter = [width / 2, height * 0.25]
+    startX = pickStartX(width)
+    startY = randomBetween(300, 860)
+    poster.translation = [startX, startY]
+
+    addDrift(id, startX, startY, driftSeconds, peakOpacity)
+    addPulse(id, depth)
+end sub
+
+' Sobe devagar com desvio lateral; a opacidade sobe no inicio e cai no fim
+' do ciclo, escondendo o salto de volta ao ponto de partida.
+sub addDrift(id as string, startX as float, startY as float, seconds as float, peakOpacity as float)
+    drift = m.top.createChild("Animation")
+    drift.duration = seconds
+    drift.repeat = true
+    drift.easeFunction = "linear"
+    drift.delay = randomBetween(0, seconds)
+
+    path = drift.createChild("Vector2DFieldInterpolator")
+    path.key = [0.0, 1.0]
+    path.keyValue = [[startX, startY], [startX + randomBetween(-280, 280), startY - randomBetween(420, 760)]]
+    path.fieldToInterp = id + ".translation"
+
+    fade = drift.createChild("FloatFieldInterpolator")
+    fade.key = [0.0, 0.14, 0.86, 1.0]
+    fade.keyValue = [0.0, peakOpacity, peakOpacity, 0.0]
+    fade.fieldToInterp = id + ".opacity"
+
+    drift.control = "start"
+end sub
+
+' Pulso do sino (achata e alonga) e leve balanco, em ciclo curto.
+sub addPulse(id as string, depth as float)
+    pulse = m.top.createChild("Animation")
+    pulse.duration = randomBetween(3.4, 5.6) * (1 + (1 - depth) * 0.4)
+    pulse.repeat = true
+    pulse.easeFunction = "inOutSine"
+
+    squash = pulse.createChild("Vector2DFieldInterpolator")
+    squash.key = [0.0, 0.5, 1.0]
+    squash.keyValue = [[1.0, 1.0], [0.93, 1.07], [1.0, 1.0]]
+    squash.fieldToInterp = id + ".scale"
+
+    sway = pulse.createChild("FloatFieldInterpolator")
+    sway.key = [0.0, 0.5, 1.0]
+    sway.keyValue = [-0.05, 0.05, -0.05]
+    sway.fieldToInterp = id + ".rotation"
+
+    pulse.control = "start"
+end sub

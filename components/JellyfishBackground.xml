@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="JellyfishBackground" extends="Group">
+  <children>
+    <Rectangle id="abyss" width="1920" height="1080" color="#010312" />
+    <Poster id="haze" uri="pkg:/images/brand/aurora-blue.png" width="1100" height="1100" translation="[410,-520]" opacity="0.16" />
+  </children>
+</component>
