@@ -1,0 +1,269 @@
+' Modo Explorar: com o filme pausado, mostra uma FOTO do quadro (pedida ao servico
+' de quadros, scripts/frame_server.py) e deixa ampliar/mover com uma mira. O video
+' da TV nunca e redimensionado (isso distorcia a imagem na SEMP).
+' A matematica fica em source/utils/exploreMath.bs; aqui ha estado, teclas e desenho.
+
+import "pkg:/source/enums/KeyCode.bs"
+import "pkg:/source/utils/exploreMath.bs"
+
+const framePort = 8790
+' true: o recorte vem como MP4 de um quadro tocado no plano de video (mesma cor
+' do filme); false: JPEG em Poster (cor diferente, mas sem tela preta ao trocar).
+const useClipVideo = true
+const cursorStep = 0.03
+const edgeMarginU = 0.12
+const edgeMarginV = 0.16
+
+sub init()
+    m.imageA = m.top.findNode("imageA")
+    m.imageB = m.top.findNode("imageB")
+    m.crosshair = m.top.findNode("crosshair")
+    m.quadrantGrid = m.top.findNode("quadrantGrid")
+    m.quadrantHighlight = m.top.findNode("quadrantHighlight")
+    m.gridVertical = m.top.findNode("gridVertical")
+    m.gridHorizontal = m.top.findNode("gridHorizontal")
+    m.infoText = m.top.findNode("infoText")
+    m.hintText = m.top.findNode("hintText")
+    m.errorText = m.top.findNode("errorText")
+    m.stageClip = m.top.findNode("stageClip")
+    m.backdrop = m.top.findNode("backdrop")
+end sub
+
+' params = { itemId, position (s), baseUrl (servidor Jellyfin), token }
+sub begin(params as object)
+    m.params = params
+    m.mode = "cursor"
+    m.region = exploreFullRegion()
+    m.frontRegion = exploreFullRegion()
+    m.pendingRegion = exploreFullRegion()
+    m.cursorU = 0.5
+    m.cursorV = 0.5
+    m.quadrant = 0
+    m.stage = exploreStage(16, 9)
+    m.front = m.imageA
+    m.loading = m.imageB
+    m.imageA.visible = false
+    m.imageB.visible = false
+    m.errorText.visible = false
+    m.backdrop.visible = not useClipVideo
+    m.frameBase = frameServiceBase(params.baseUrl)
+    layoutStage()
+    if m.frameBase = ""
+        showError("Endereco do servidor invalido: " + params.baseUrl)
+    else
+        requestRegion(m.region)
+    end if
+    render()
+end sub
+
+' http://192.168.0.26:8096 -> http://192.168.0.26:8790
+function frameServiceBase(serverUrl as string) as string
+    match = CreateObject("roRegex", "^(https?://[^/:]+)", "").Match(serverUrl)
+    if match.count() < 2 then return ""
+    return match[1] + ":" + framePort.toStr()
+end function
+
+function formatNumber(value as float) as string
+    return Str(Int(value * 10000 + 0.5) / 10000.0).trim()
+end function
+
+function buildFrameUrl(region as object) as string
+    p = m.params
+    return m.frameBase + "/frame?item=" + p.itemId + "&t=" + formatNumber(p.position) + "&x=" + formatNumber(region.x) + "&y=" + formatNumber(region.y) + "&w=" + formatNumber(region.w) + "&h=" + formatNumber(region.h) + "&out=3840&api_key=" + p.token
+end function
+
+sub requestRegion(region as object)
+    m.pendingRegion = region
+    if useClipVideo
+        requestClip(region)
+        return
+    end if
+    m.loading.unobserveFieldScoped("loadStatus")
+    m.loading.observeFieldScoped("loadStatus", "onFrameLoadStatus")
+    m.loading.uri = buildFrameUrl(region)
+    showPreview()
+end sub
+
+' O player toca o clipe no proprio no de video (a Roku so permite uma reproducao).
+sub requestClip(region as object)
+    m.top.clipUrl = buildFrameUrl(region).replace("/frame?", "/clip?")
+end sub
+
+' O player pausa sozinho ao comecar o clipe e avisa aqui para segurar a imagem.
+sub onClipState()
+    state = m.top.playerState
+    if state = "error"
+        showError("Clipe de quadro falhou em " + m.frameBase + ": " + m.top.playerError)
+        return
+    end if
+    if state <> "playing" then return
+    m.frontRegion = m.pendingRegion
+    m.errorText.visible = false
+    render()
+end sub
+
+' Enquanto a foto nitida carrega, a anterior e esticada para parecer a regiao nova.
+sub showPreview()
+    if not m.front.visible then return
+    rect = explorePreviewRect(m.frontRegion, m.pendingRegion, m.stage)
+    placeImage(m.front, rect)
+end sub
+
+sub placeImage(image as object, rect as object)
+    image.translation = [rect.x, rect.y]
+    image.width = rect.w
+    image.height = rect.h
+end sub
+
+sub onFrameLoadStatus()
+    status = m.loading.loadStatus
+    if status = "failed"
+        showError("Nao consegui buscar o quadro em " + m.frameBase + " (servico de quadros ligado? token valido?)")
+        return
+    end if
+    if status <> "ready" then return
+
+    if m.loading.bitmapWidth > 0 and not m.front.visible
+        m.stage = exploreStage(m.loading.bitmapWidth, m.loading.bitmapHeight)
+        layoutStage()
+    end if
+    placeImage(m.loading, m.stage)
+    m.loading.visible = true
+    m.front.visible = false
+    m.frontRegion = m.pendingRegion
+    swap = m.front
+    m.front = m.loading
+    m.loading = swap
+    m.errorText.visible = false
+    render()
+end sub
+
+sub showError(message as string)
+    m.errorText.text = message
+    m.errorText.visible = true
+end sub
+
+sub layoutStage()
+    m.stageClip.clippingRect = [m.stage.x, m.stage.y, m.stage.w, m.stage.h]
+    m.gridVertical.translation = [m.stage.x + m.stage.w / 2 - 1, m.stage.y]
+    m.gridVertical.height = m.stage.h
+    m.gridHorizontal.translation = [m.stage.x, m.stage.y + m.stage.h / 2 - 1]
+    m.gridHorizontal.width = m.stage.w
+    m.quadrantHighlight.width = m.stage.w / 2
+    m.quadrantHighlight.height = m.stage.h / 2
+end sub
+
+function handleKey(key as string) as boolean
+    if key = KeyCode.PLAY
+        m.top.resume = true
+        requestExit()
+    else if key = KeyCode.BACK
+        goBack()
+    else if key = KeyCode.REPLAY
+        toggleMode()
+    else if m.mode = "quadrants"
+        handleQuadrantKey(key)
+    else
+        handleCursorKey(key)
+    end if
+    render()
+    return true
+end function
+
+sub goBack()
+    if m.region.w < 1
+        setRegion(exploreFullRegion())
+        return
+    end if
+    m.top.resume = false
+    requestExit()
+end sub
+
+sub toggleMode()
+    if m.mode = "quadrants"
+        m.mode = "cursor"
+        return
+    end if
+    if m.region.w < 1 then setRegion(exploreFullRegion())
+    m.mode = "quadrants"
+end sub
+
+sub handleQuadrantKey(key as string)
+    if key = KeyCode.OK or key = KeyCode.CHANNELUP or key = KeyCode.FASTFORWRD
+        m.cursorU = 0.5
+        m.cursorV = 0.5
+        m.mode = "cursor"
+        setRegion(exploreQuadrantRegion(m.quadrant))
+    else
+        m.quadrant = exploreMoveQuadrant(m.quadrant, key)
+    end if
+end sub
+
+sub handleCursorKey(key as string)
+    if key = KeyCode.CHANNELUP or key = KeyCode.FASTFORWRD
+        changeZoom(1)
+    else if key = KeyCode.CHANNELDOWN or key = KeyCode.REWIND
+        changeZoom(-1)
+    else if key = KeyCode.LEFT
+        moveCursor(-cursorStep, 0)
+    else if key = KeyCode.RIGHT
+        moveCursor(cursorStep, 0)
+    else if key = KeyCode.UP
+        moveCursor(0, -cursorStep)
+    else if key = KeyCode.DOWN
+        moveCursor(0, cursorStep)
+    end if
+end sub
+
+sub setRegion(region as object)
+    m.region = region
+    requestRegion(region)
+end sub
+
+sub changeZoom(direction as integer)
+    current = 1.0 / m.region.w
+    newZoom = exploreNextZoom(current, direction)
+    if newZoom = current then return
+    setRegion(exploreRegionZoomAt(m.region, m.cursorU, m.cursorV, newZoom))
+end sub
+
+' Com zoom, a mira anda ate perto da borda; alem disso a imagem e arrastada.
+' Sem zoom, a mira anda por toda a imagem.
+sub moveCursor(du as float, dv as float)
+    targetU = m.cursorU + du
+    targetV = m.cursorV + dv
+    if m.region.w < 1
+        panU = 0.0
+        panV = 0.0
+        if targetU < edgeMarginU or targetU > 1 - edgeMarginU
+            panU = du
+            targetU = m.cursorU
+        end if
+        if targetV < edgeMarginV or targetV > 1 - edgeMarginV
+            panV = dv
+            targetV = m.cursorV
+        end if
+        if panU <> 0 or panV <> 0 then setRegion(exploreRegionPan(m.region, panU, panV))
+    end if
+    m.cursorU = exploreClamp(targetU, 0.02, 0.98)
+    m.cursorV = exploreClamp(targetV, 0.02, 0.98)
+end sub
+
+sub render()
+    m.crosshair.visible = m.mode = "cursor"
+    m.crosshair.translation = [m.stage.x + m.cursorU * m.stage.w - 60, m.stage.y + m.cursorV * m.stage.h - 60]
+    m.quadrantGrid.visible = m.mode = "quadrants"
+    m.quadrantHighlight.translation = [m.stage.x + (m.quadrant mod 2) * m.stage.w / 2, m.stage.y + Int(m.quadrant / 2) * m.stage.h / 2]
+    zoomLabel = Str(1.0 / m.region.w).trim()
+    if Len(zoomLabel) > 4 then zoomLabel = Left(zoomLabel, 4)
+    m.infoText.text = "Explorar  -  Zoom " + zoomLabel + "x"
+    if m.mode = "quadrants"
+        m.hintText.text = "Setas: escolher   OK: ampliar   Replay: mira   Voltar: sair   Play: continuar filme"
+    else
+        m.hintText.text = "Setas: mover   CH+: aproximar   CH-: afastar   Replay: quadrantes   Voltar: sair"
+    end if
+end sub
+
+sub requestExit()
+    m.top.exitRequested = true
+end sub

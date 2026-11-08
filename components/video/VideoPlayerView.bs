@@ -82,6 +82,11 @@ sub init()
     m.chapterContent = m.top.findNode("chapterContent")
     m.osd = m.top.findNode("osd")
     m.osd.observeField("action", "onOSDAction")
+    m.explore = m.top.findNode("explore")
+    m.explore.observeField("exitRequested", "onExploreExit")
+    m.explore.observeField("clipUrl", "onExploreClipRequested")
+    m.exploreActive = false
+    m.exploreRestorePause = false
     m.osd.isRecording = false
     m.osd.recordingOffset = 0
     m.castPopup = m.top.findNode("castPopup")
@@ -193,9 +198,15 @@ sub init()
     m.getNextEpisodeTask = createObject("roSGNode", "GetNextEpisodeTask")
     m.getNextEpisodeTask.observeField("nextEpisodeData", "onNextEpisodeDataLoaded")
 
-    m.top.retrievingBar.filledBarBlendColor = ColorPalette.TRIADBLUE
-    m.top.bufferingBar.filledBarBlendColor = ColorPalette.TRIADBLUE
-    m.top.trickPlayBar.filledBarBlendColor = ColorPalette.TRIADBLUE
+    ' Buffer baixado: segStartTime e bufferLevel vem sempre 0 neste player, entao
+    ' acumulamos segDuration desde o inicio da sessao (inicio ou ultimo pulo).
+    m.bufferSessionBase = 0.0
+    m.bufferSessionSeconds = 0.0
+    m.lastBufferPosition = 0.0
+    m.top.observeField("downloadedSegment", "onSegmentDownloaded")
+    m.top.retrievingBar.filledBarBlendColor = ColorPalette.HIGHLIGHT
+    m.top.bufferingBar.filledBarBlendColor = ColorPalette.HIGHLIGHT
+    m.top.trickPlayBar.filledBarBlendColor = ColorPalette.HIGHLIGHT
 
     m.previewPos = 0 ' Track the seeking position in the video when the user starts seeking
     m.seekSpeedIndex = 0 ' Index to track the current seek speed level
@@ -551,6 +562,11 @@ sub onOSDAction()
 
     if action = "showsubtitlemenu"
         handleShowSubtitleMenuAction()
+        return
+    end if
+
+    if action = "exploremode"
+        startExplore()
         return
     end if
 
@@ -1193,6 +1209,7 @@ end sub
 
 ' Event handler for when video content field changes
 sub onContentChange()
+    if m.exploreActive then return
     if not isValid(m.top.content) then return
     m.top.observeField("position", "onPositionChanged")
 end sub
@@ -1397,6 +1414,7 @@ end sub
 
 ' When Video Player state changes
 sub onPositionChanged()
+    if m.exploreActive then return
     if not m.playbackTestComplete
         if m.attemptDirectPlaySetting
             if not m.isTranscoded
@@ -1404,6 +1422,8 @@ sub onPositionChanged()
             end if
         end if
     end if
+
+    resetBufferSessionOnSeek(m.top.position)
 
     ' Pass video position data into OSD
     if m.osd.progressDuration = 0
@@ -1485,6 +1505,14 @@ end sub
 '
 ' When Video Player state changes
 sub onState(msg)
+    if m.exploreActive
+        onExploreState()
+        return
+    end if
+    if m.exploreRestorePause and isStringEqual(m.top.state, MediaPlaybackState.PLAYING)
+        m.exploreRestorePause = false
+        m.top.control = VideoControl.PAUSE
+    end if
     if isValid(m.captionTask)
         m.captionTask.playerState = m.top.state + m.top.globalCaptionMode
     end if
@@ -1743,6 +1771,7 @@ end function
 '
 ' Report playback to server
 sub ReportPlayback(state = "update" as string)
+    if m.exploreActive then return
 
     if m.top.position = invalid then return
 
@@ -1977,6 +2006,12 @@ sub changeSubtitleTimeOffset(offsetAmount as integer)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    ' Explorar consome todas as teclas ate sair, para nao disparar a barra do player
+    if m.exploreActive
+        if press then m.explore.callFunc("handleKey", key)
+        return true
+    end if
+
     if m.castPopup.visible
         if press and m.castPopup.callFunc("handleKey", key)
             if not m.castPopup.visible then m.top.setFocus(true)
@@ -2670,4 +2705,82 @@ sub onVoiceCommand()
         skipCurrentSegment()
         return
     end if
+end sub
+
+
+' onSegmentDownloaded: soma a duracao de cada segmento baixado e publica o ponto
+' ate onde o filme ja esta no buffer (segundos).
+sub onSegmentDownloaded(event as object)
+    if m.exploreActive then return
+    segment = event.getData()
+    if not isValid(segment) then return
+    duration = chainLookupReturn(segment, "segDuration", 0)
+    m.bufferSessionSeconds += duration / 1000
+    m.osd.bufferedSeconds = m.bufferSessionBase + m.bufferSessionSeconds
+end sub
+
+' resetBufferSessionOnSeek: um pulo descarta o buffer; recomeca a contagem da
+' nova posicao. Pulo = salto de posicao maior que 3 s para frente ou 1 s para tras.
+sub resetBufferSessionOnSeek(position as float)
+    jump = position - m.lastBufferPosition
+    m.lastBufferPosition = position
+    if jump < 3 and jump > -1 then return
+    m.bufferSessionBase = position
+    m.bufferSessionSeconds = 0.0
+    m.osd.bufferedSeconds = position
+end sub
+
+
+' ---- Modo Explorar (zoom no quadro pausado) ----
+
+' startExplore: pausa o filme, guarda conteudo e posicao, esconde a barra e liga o
+' overlay. Cada recorte e um clipe MP4 que troca o conteudo do proprio no.
+sub startExplore()
+    m.top.control = VideoControl.PAUSE
+    m.exploreSaved = {content: m.top.content, position: m.top.position}
+    m.exploreRestorePause = false
+    handleHideAction(false)
+    m.exploreActive = true
+    m.explore.visible = true
+    m.explore.callFunc("begin", {
+        itemId: m.top.id,
+        position: m.exploreSaved.position,
+        baseUrl: m.global.session.server.url,
+        token: m.global.session.user.authToken
+    })
+    m.top.setFocus(true)
+end sub
+
+sub onExploreClipRequested()
+    content = CreateObject("roSGNode", "ContentNode")
+    content.url = m.explore.clipUrl
+    content.streamFormat = "mp4"
+    m.top.content = content
+    m.top.control = VideoControl.PLAY
+end sub
+
+' Segura o primeiro quadro do clipe e repassa o estado ao overlay.
+sub onExploreState()
+    state = m.top.state
+    if isStringEqual(state, MediaPlaybackState.PLAYING) then m.top.control = VideoControl.PAUSE
+    if isStringEqual(state, MediaPlaybackState.ERROR) then m.explore.playerError = m.top.errorMsg
+    m.explore.playerState = state
+end sub
+
+sub onExploreExit()
+    m.exploreActive = false
+    m.exploreRestorePause = false
+    m.explore.visible = false
+    restoreFilmAfterExplore(m.explore.resume)
+    m.top.setFocus(true)
+end sub
+
+' Reabre o filme na posicao em que o Explorar comecou; sem "resume" pausa ali.
+sub restoreFilmAfterExplore(resume as boolean)
+    saved = m.exploreSaved
+    if saved = invalid or saved.content = invalid then return
+    saved.content.playStart = saved.position
+    m.exploreRestorePause = not resume
+    m.top.content = saved.content
+    m.top.control = VideoControl.PLAY
 end sub
