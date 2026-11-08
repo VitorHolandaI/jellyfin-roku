@@ -51,7 +51,7 @@ plugin do Jellyfin.
 Suba no mesmo host do Jellyfin, ligado ao IP da LAN (nao em `0.0.0.0` sem necessidade):
 
     python3 frame_server.py --jellyfin http://127.0.0.1:8096 \
-        --map /media=/home/vitor/jellyfin-test/media --bind 192.168.0.26 --port 8790
+        --map /media=/caminho/da/midia --bind <ip-do-servidor> --port 8790
 
 - `--map CONTAINER=DISCO` e repetivel e traduz o caminho que o Jellyfin ve (no container)
   para o do disco. Sem ele nenhum arquivo e servido.
