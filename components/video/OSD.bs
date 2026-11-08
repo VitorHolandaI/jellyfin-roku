@@ -741,6 +741,9 @@ sub updateProgressBar(live as boolean, updatePosition as integer)
         end if
         scrubberOldPositionTrans = (m.progressBarBackground.width * ((m.top.recordingOffset + scrubberOldPositionTime) / m.top.liveTvRewindLimit)) - m.scrubberOldPosition.width / 2
     else
+        ' Sem duracao (conteudo recem-trocado) nao ha barra para calcular; a divisao
+        ' por zero abre o debugger e congela o app numa tela preta.
+        if m.top.progressDuration <= 0 then return
         ' If we are actively seeking then use the preview position to update the progress bar, otherwise use the current position
         if m.top.isSeeking
             m.videoRemainingTime.text = secondsToHuman(m.top.progressDuration - updatePosition, true)
