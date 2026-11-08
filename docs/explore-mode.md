@@ -26,11 +26,15 @@ sai; Play sai e retoma o filme. Zooms: 1, 1.5, 2, 3, 4, 6 e 8x
 O app nao amplia o video da TV. Ele pede ao `tools/frame-server` um **clipe MP4 de um
 quadro** ja recortado (3840 px de largura) e toca no proprio no de video do player,
 pausado no primeiro quadro. O filme e a posicao ficam guardados e voltam ao sair.
-- `components/video/ExploreOverlay.bs/.xml`: estado, teclas e interface.
+- `components/video/ExploreOverlay.bs/.xml`: estado, teclas e interface. O rodape mostra
+  `Zoom Nx - fonte LxA px`: os pixels **nativos** que aquele recorte tem (um zoom 4x de
+  um quadro 4K mostra so 960x540 de origem, esticados). O palco usa a proporcao real do
+  filme (`streamInfo` do player), nao 16:9 fixo.
 - `components/video/VideoPlayerView.bs`: troca e restaura o conteudo; durante o Explorar
   ignora estado, posicao, buffer e relatorio de reproducao.
 - `tools/frame-server/`: o servico (contrato HTTP no README da pasta). HDR (PQ ou HLG)
-  sai em HEVC 10 bits; SDR em H.264 sem converter a cor.
+  sai em HEVC 10 bits com as tags de cor do filme; SDR em H.264 sem converter a cor. A
+  resposta traz `X-Crop-Source-Px` e `X-Source-Width` para conferir o recorte por `curl`.
 - A constante `useClipVideo` no overlay volta ao JPEG em `Poster` quando e `false`.
 
 ### Por que assim
@@ -57,6 +61,10 @@ pausado no primeiro quadro. O filme e a posicao ficam guardados e voltam ao sair
 4. Testes do servico: `python3 -m unittest test_frame_server` dentro de `tools/frame-server`.
 
 ## Pendente
-- Cor e nitidez em SDR e o tempo de troca de zoom (~2 s) so foram confirmados em HDR.
+- Tempo de troca de zoom: o encode caiu de 2,3 s (96 quadros) para 0,7 s (12 quadros) num
+  4K HDR10 medido com `ffmpeg` no servidor; falta confirmar o tempo total na TV.
+- Cor e nitidez em SDR com o clipe ainda nao foram confirmadas pelo usuario (so HDR).
 - HDR10+ e Dolby Vision nao sao tratados (so PQ e HLG por tag).
-- O servico e um script Python; pode virar Rust depois.
+- `hevc_vaapi` foi medido e nao ganhou nada com 12 quadros (0,74 s contra 0,74 s do
+  `libx265`), entao o caminho por hardware ficou de fora. O servico e um script Python;
+  um port para Rust so vale se o encode deixar de ser o gargalo.

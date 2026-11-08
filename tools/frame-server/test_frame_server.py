@@ -119,15 +119,26 @@ class BuildHdrClipArgsTest(unittest.TestCase):
     PARAMS = {"t": 1.0, "x": 0, "y": 0, "w": 1, "h": 1, "out": 3840}
 
     def test_hdr_clip_is_hevc_10bit_tagged_hvc1(self) -> None:
-        args = frame_server.build_clip_args(Path("/a.mp4"), self.PARAMS, Path("/o.mp4"), hdr=True)
+        args = frame_server.build_clip_args(Path("/a.mp4"), self.PARAMS, Path("/o.mp4"), "smpte2084", "bt2020")
         self.assertEqual(args[args.index("-c:v") + 1], "libx265")
         self.assertEqual(args[args.index("-tag:v") + 1], "hvc1")
         self.assertIn("format=yuv420p10le", args[args.index("-vf") + 1])
 
+    def test_hdr_clip_carries_the_source_colour_tags(self) -> None:
+        args = frame_server.build_clip_args(Path("/a.mp4"), self.PARAMS, Path("/o.mp4"), "smpte2084", "bt2020")
+        self.assertEqual(args[args.index("-color_trc") + 1], "smpte2084")
+        self.assertEqual(args[args.index("-color_primaries") + 1], "bt2020")
+        self.assertEqual(args[args.index("-colorspace") + 1], "bt2020nc")
+
+    def test_hlg_clip_keeps_hlg_transfer(self) -> None:
+        args = frame_server.build_clip_args(Path("/a.mp4"), self.PARAMS, Path("/o.mp4"), "arib-std-b67", "bt2020")
+        self.assertEqual(args[args.index("-color_trc") + 1], "arib-std-b67")
+
     def test_sdr_clip_stays_h264_8bit(self) -> None:
-        args = frame_server.build_clip_args(Path("/a.mp4"), self.PARAMS, Path("/o.mp4"))
+        args = frame_server.build_clip_args(Path("/a.mp4"), self.PARAMS, Path("/o.mp4"), "bt709", "bt709")
         self.assertEqual(args[args.index("-c:v") + 1], "libx264")
         self.assertIn("format=yuv420p,", args[args.index("-vf") + 1])
+        self.assertNotIn("-color_trc", args)
 
 
 class ParseRangeTest(unittest.TestCase):
@@ -156,6 +167,63 @@ class FrameCacheTest(unittest.TestCase):
             cache.put((index,), b"x")
         self.assertIsNone(cache.get((0,)))
         self.assertEqual(cache.get((frame_server.CACHE_SIZE + 4,)), b"x")
+
+
+class ClipDurationTest(unittest.TestCase):
+    def test_clip_is_half_a_second(self) -> None:
+        self.assertAlmostEqual(frame_server.CLIP_FRAMES / frame_server.CLIP_FPS, 0.5, places=3)
+
+
+class ParseProbeOutputTest(unittest.TestCase):
+    def test_reads_size_and_colour_tags(self) -> None:
+        info = frame_server.parse_probe_output(
+            "width=3840\nheight=2160\ncolor_transfer=smpte2084\ncolor_primaries=bt2020")
+        self.assertEqual((info["width"], info["height"]), (3840, 2160))
+        self.assertEqual(info["transfer"], "smpte2084")
+        self.assertEqual(info["primaries"], "bt2020")
+
+    def test_untagged_source_has_empty_colour_tags(self) -> None:
+        info = frame_server.parse_probe_output("width=1920\nheight=800\n")
+        self.assertEqual((info["width"], info["height"]), (1920, 800))
+        self.assertEqual((info["transfer"], info["primaries"]), ("", ""))
+
+    def test_missing_size_names_the_expected_format(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            frame_server.parse_probe_output("width=1920\n")
+        self.assertIn("height", str(caught.exception))
+
+
+class FrameHeadersTest(unittest.TestCase):
+    HDR_SOURCE = {"width": 3840, "height": 2160, "transfer": "smpte2084", "primaries": "bt2020"}
+
+    def test_full_frame_keeps_the_whole_source(self) -> None:
+        params = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "out": 3840}
+        headers = frame_server.frame_headers(self.HDR_SOURCE, params)
+        self.assertEqual(headers["X-Source-Width"], "3840")
+        self.assertEqual(headers["X-Crop-Source-Px"], "3840x2160")
+        self.assertEqual(headers["X-Output-Px"], "3840x2160")
+
+    def test_four_times_zoom_reports_the_native_crop(self) -> None:
+        params = {"x": 0.375, "y": 0.375, "w": 0.25, "h": 0.25, "out": 3840}
+        headers = frame_server.frame_headers(self.HDR_SOURCE, params)
+        self.assertEqual(headers["X-Crop-Source-Px"], "960x540")
+
+    def test_output_height_follows_the_crop_aspect_rounded_to_even(self) -> None:
+        source = {"width": 1920, "height": 800, "transfer": "bt709", "primaries": "bt709"}
+        headers = frame_server.frame_headers(source, {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "out": 1280})
+        self.assertEqual(headers["X-Output-Px"], "1280x534")
+
+
+class CheckClipOutputTest(unittest.TestCase):
+    PARAMS = {"t": 29.9, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "out": 3840}
+
+    def test_rejects_empty_clip_and_names_the_time(self) -> None:
+        with self.assertRaises(RuntimeError) as caught:
+            frame_server.check_clip_output(b"", self.PARAMS)
+        self.assertIn("29.9", str(caught.exception))
+
+    def test_accepts_a_real_clip(self) -> None:
+        frame_server.check_clip_output(b"x" * 2000, self.PARAMS)
 
 
 if __name__ == "__main__":

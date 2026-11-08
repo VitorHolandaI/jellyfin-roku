@@ -2740,16 +2740,28 @@ sub startExplore()
     m.exploreSaved = {content: m.top.content, position: m.top.position}
     m.exploreRestorePause = false
     handleHideAction(false)
+    size = exploreVideoSize()
     m.exploreActive = true
     m.explore.visible = true
     m.explore.callFunc("begin", {
         itemId: m.top.id,
         position: m.exploreSaved.position,
         baseUrl: m.global.session.server.url,
-        token: m.global.session.user.authToken
+        token: m.global.session.user.authToken,
+        videoWidth: size.w,
+        videoHeight: size.h
     })
     m.top.setFocus(true)
 end sub
+
+' exploreVideoSize: tamanho real do filme, usado no palco e no rotulo "fonte".
+function exploreVideoSize() as object
+    info = m.top.streamInfo
+    width = chainLookupReturn(info, "width", 0)
+    height = chainLookupReturn(info, "height", 0)
+    if width > 0 and height > 0 then return {w: width, h: height}
+    return {w: m.top.width, h: m.top.height}
+end function
 
 sub onExploreClipRequested()
     content = CreateObject("roSGNode", "ContentNode")

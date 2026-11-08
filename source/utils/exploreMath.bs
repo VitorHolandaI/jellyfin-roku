@@ -88,6 +88,16 @@ function exploreNextZoom(current as float, direction as integer) as float
     return steps[index]
 end function
 
+' Pixels nativos do recorte: o que o zoom REALMENTE tem de detalhe. Um recorte
+' 4x num quadro 4K (3840x2160) tem so 960x540 de origem, esticados ate a tela.
+function exploreSourceCrop(videoWidth as float, videoHeight as float, region as object) as object
+    width = Int(videoWidth * region.w + 0.5)
+    height = Int(videoHeight * region.h + 0.5)
+    if width < 1 then width = 1
+    if height < 1 then height = 1
+    return { w: width, h: height }
+end function
+
 ' Move a selecao de quadrante pelas setas, sem sair da grade 2x2.
 function exploreMoveQuadrant(quadrant as integer, key as string) as integer
     column = quadrant mod 2

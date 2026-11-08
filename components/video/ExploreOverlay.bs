@@ -29,7 +29,7 @@ sub init()
     m.backdrop = m.top.findNode("backdrop")
 end sub
 
-' params = { itemId, position (s), baseUrl (servidor Jellyfin), token }
+' params = { itemId, position (s), baseUrl, token, videoWidth, videoHeight }
 sub begin(params as object)
     m.params = params
     m.mode = "cursor"
@@ -39,7 +39,11 @@ sub begin(params as object)
     m.cursorU = 0.5
     m.cursorV = 0.5
     m.quadrant = 0
-    m.stage = exploreStage(16, 9)
+    m.videoWidth = 0
+    m.videoHeight = 0
+    if params.videoWidth <> invalid then m.videoWidth = params.videoWidth
+    if params.videoHeight <> invalid then m.videoHeight = params.videoHeight
+    m.stage = exploreStage(m.videoWidth, m.videoHeight)
     m.front = m.imageA
     m.loading = m.imageB
     m.imageA.visible = false
@@ -256,7 +260,8 @@ sub render()
     m.quadrantHighlight.translation = [m.stage.x + (m.quadrant mod 2) * m.stage.w / 2, m.stage.y + Int(m.quadrant / 2) * m.stage.h / 2]
     zoomLabel = Str(1.0 / m.region.w).trim()
     if Len(zoomLabel) > 4 then zoomLabel = Left(zoomLabel, 4)
-    m.infoText.text = "Explorar  -  Zoom " + zoomLabel + "x"
+    crop = exploreSourceCrop(m.videoWidth, m.videoHeight, m.region)
+    m.infoText.text = "Explorar  -  Zoom " + zoomLabel + "x  -  fonte " + crop.w.toStr() + "x" + crop.h.toStr() + " px"
     if m.mode = "quadrants"
         m.hintText.text = "Setas: escolher   OK: ampliar   Replay: mira   Voltar: sair   Play: continuar filme"
     else

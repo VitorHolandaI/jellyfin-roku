@@ -8,6 +8,7 @@ Devolve um JPEG do quadro em `t`, recortado (x,y,w,h em 0..1) e escalado para
 do arquivo vem do item (Fields=Path) e so e servido se estiver sob um --map.
 """
 import argparse
+import functools
 import json
 import re
 import subprocess
@@ -31,7 +32,11 @@ MAX_PARALLEL_FFMPEG = 2
 SCALE_COLOR = "flags=lanczos:in_color_matrix=bt709:in_range=tv:out_range=pc,format=yuvj420p"
 MIN_OUT, MAX_OUT = 320, 3840
 CLIP_FPS = 24
-CLIP_FRAMES = CLIP_FPS * 4
+# Meio segundo basta: a TV pausa no primeiro quadro. Cada segundo custa encode;
+# com 96 quadros (4 s) a troca de zoom levava 2,3 s, com 12 leva 0,7 s.
+CLIP_FRAMES = CLIP_FPS // 2
+MIN_CLIP_BYTES = 1024
+PROBE_ENTRIES = "stream=width,height,color_transfer,color_primaries"
 
 
 class BadRequest(ValueError):
@@ -97,22 +102,81 @@ def is_hdr_transfer(transfer: str) -> bool:
     return transfer in HDR_TRANSFERS
 
 
-def probe_color_transfer(media_file: Path) -> str:
-    """Le a curva de transferencia do video (ex.: smpte2084 = HDR10)."""
+def parse_probe_output(text: str) -> dict:
+    """Le as linhas chave=valor do ffprobe; cor ausente vira string vazia."""
+    values = {}
+    for line in text.splitlines():
+        name, _, value = line.partition("=")
+        if name.strip():
+            values[name.strip()] = value.strip()
+    try:
+        width = int(values["width"])
+        height = int(values["height"])
+    except (KeyError, ValueError):
+        raise ValueError(
+            f"saida do ffprobe sem width/height: {text!r}, "
+            "esperado linhas width=N e height=N") from None
+    return {"width": width, "height": height,
+            "transfer": values.get("color_transfer", ""),
+            "primaries": values.get("color_primaries", "")}
+
+
+@functools.lru_cache(maxsize=32)
+def probe_video_info(media_file: Path) -> dict:
+    """Tamanho e cor do video; o ffprobe roda uma vez por arquivo."""
     result = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-         "stream=color_transfer", "-of", "default=nw=1:nk=1", str(media_file)],
+         PROBE_ENTRIES, "-of", "default=nw=1", str(media_file)],
         capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS, check=False)
     if result.returncode != 0:
-        raise RuntimeError(f"ffprobe falhou em {str(media_file)!r}: {result.stderr.decode()[:200]}")
-    return result.stdout.decode().strip()
+        raise RuntimeError(
+            f"ffprobe falhou em {str(media_file)!r}: {result.stderr.decode()[:200]}")
+    try:
+        return parse_probe_output(result.stdout.decode())
+    except ValueError as error:
+        raise RuntimeError(f"{media_file}: {error}") from error
 
 
-def build_clip_args(media_file: Path, params: dict, output: Path, hdr: bool = False) -> list:
-    """MP4 de um quadro repetido; sem converter cor, a TV le como o filme.
+def crop_source_px(info: dict, params: dict) -> tuple:
+    """Pixels nativos do recorte: e o detalhe que o zoom realmente tem."""
+    return (max(1, int(round(info["width"] * params["w"]))),
+            max(1, int(round(info["height"] * params["h"]))))
 
-    HDR sai em HEVC 10 bits (hvc1) para manter PQ/HLG; SDR em H.264 8 bits.
+
+def output_px(info: dict, params: dict) -> tuple:
+    """Largura pedida e a altura que o scale=-2 gera (mesma proporcao, par)."""
+    crop_w, crop_h = crop_source_px(info, params)
+    height = max(2, int(round(params["out"] * crop_h / crop_w / 2)) * 2)
+    return params["out"], height
+
+
+def frame_headers(info: dict, params: dict) -> dict:
+    """Prova do zoom: resolucao do arquivo, pixels nativos do recorte e saida."""
+    crop_w, crop_h = crop_source_px(info, params)
+    out_w, out_h = output_px(info, params)
+    return {
+        "X-Source-Width": str(info["width"]),
+        "X-Source-Height": str(info["height"]),
+        "X-Crop-Source-Px": f"{crop_w}x{crop_h}",
+        "X-Output-Px": f"{out_w}x{out_h}",
+    }
+
+
+def check_clip_output(data: bytes, params: dict) -> None:
+    """Clipe vazio (t depois do fim do filme) chega com rc=0; nao pode servir."""
+    if len(data) < MIN_CLIP_BYTES:
+        raise RuntimeError(
+            f"clipe vazio em t={params['t']}: o ffmpeg nao achou quadro ali "
+            "(tempo depois do fim do filme?)")
+
+
+def build_clip_args(media_file: Path, params: dict, output: Path,
+                    transfer: str = "", primaries: str = "") -> list:
+    """MP4 de um quadro repetido que a TV le no plano de video.
+
+    HDR sai em HEVC 10 bits (hvc1) com as tags de cor do filme; SDR em H.264.
     """
+    hdr = is_hdr_transfer(transfer)
     pixel_format = "yuv420p10le" if hdr else "yuv420p"
     crop = (f"crop=iw*{params['w']}:ih*{params['h']}:"
             f"iw*{params['x']}:ih*{params['y']},scale={params['out']}:-2:flags=lanczos,"
@@ -120,9 +184,11 @@ def build_clip_args(media_file: Path, params: dict, output: Path, hdr: bool = Fa
             f"setpts=N/{CLIP_FPS}/TB")
     codec = (["-c:v", "libx265", "-preset", "ultrafast", "-crf", "14", "-tag:v", "hvc1"]
              if hdr else ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "12"])
+    colour = (["-color_primaries", primaries or "bt2020", "-color_trc", transfer,
+               "-colorspace", "bt2020nc"] if hdr else [])
     return ["ffmpeg", "-v", "error", "-y", "-ss", f"{params['t']:.3f}", "-i", str(media_file),
             "-vf", crop, "-frames:v", str(CLIP_FRAMES), "-r", str(CLIP_FPS), "-an",
-            *codec, "-movflags", "+faststart", str(output)]
+            *codec, *colour, "-movflags", "+faststart", str(output)]
 
 
 def parse_range(header: str | None, size: int) -> tuple | None:
@@ -199,16 +265,19 @@ def render_frame(media_file: Path, params: dict, gate: threading.Semaphore,
     return result.stdout
 
 
-def render_clip(media_file: Path, params: dict, gate: threading.Semaphore) -> bytes:
-    hdr = is_hdr_transfer(probe_color_transfer(media_file))
+def render_clip(media_file: Path, params: dict, gate: threading.Semaphore,
+                info: dict) -> bytes:
     with gate, tempfile.TemporaryDirectory() as folder:
         output = Path(folder) / "clip.mp4"
-        result = subprocess.run(build_clip_args(media_file, params, output, hdr),
-                                capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS * 2,
-                                check=False)
+        result = subprocess.run(
+            build_clip_args(media_file, params, output, info["transfer"], info["primaries"]),
+            capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS * 2, check=False)
         if result.returncode != 0 or not output.exists():
-            raise RuntimeError(f"ffmpeg falhou ({result.returncode}): {result.stderr.decode()[:200]}")
-        return output.read_bytes()
+            raise RuntimeError(
+                f"ffmpeg falhou ({result.returncode}): {result.stderr.decode()[:200]}")
+        data = output.read_bytes()
+    check_clip_output(data, params)
+    return data
 
 
 def make_handler(jellyfin: JellyfinClient, mappings: list, extra_filter: str = "") -> type:
@@ -218,7 +287,8 @@ def make_handler(jellyfin: JellyfinClient, mappings: list, extra_filter: str = "
         def log_message(self, fmt: str, *args: object) -> None:
             print(f"[frame_server] {self.address_string()} {fmt % args}", flush=True)
 
-        def _reply(self, status: int, body: bytes, content_type: str = "text/plain") -> None:
+        def _reply(self, status: int, body: bytes, content_type: str = "text/plain",
+                   extra_headers: dict | None = None) -> None:
             try:
                 span = parse_range(self.headers.get("Range"), len(body)) if status == 200 else None
             except BadRequest as error:
@@ -231,23 +301,31 @@ def make_handler(jellyfin: JellyfinClient, mappings: list, extra_filter: str = "
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Accept-Ranges", "bytes")
             self.send_header("Cache-Control", "no-store")
+            for name, value in (extra_headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError) as error:
+                # A TV abandona o clipe anterior ao pedir o proximo; nao e falha nossa.
+                print(f"[frame_server] cliente cancelou antes do fim: {error}", flush=True)
 
         def _produce(self, kind: str, query: dict) -> tuple:
             params = parse_frame_query(query)
             token = query.get("api_key", [""])[0]
             jellyfin.check_token(token)
             media_file = map_media_path(jellyfin.item_path(params["item"], token), mappings)
+            info = probe_video_info(media_file)
             key = (kind, extra_filter, str(media_file), round(params["t"], 1), params["x"],
                    params["y"], params["w"], params["h"], params["out"])
             body = cache.get(key)
             if body is None and kind == "clip":
-                body = render_clip(media_file, params, gate)
+                body = render_clip(media_file, params, gate, info)
             elif body is None:
                 body = render_frame(media_file, params, gate, extra_filter)
             cache.put(key, body)
-            return body, ("video/mp4" if kind == "clip" else "image/jpeg")
+            content_type = "video/mp4" if kind == "clip" else "image/jpeg"
+            return body, content_type, frame_headers(info, params)
 
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
@@ -256,7 +334,8 @@ def make_handler(jellyfin: JellyfinClient, mappings: list, extra_filter: str = "
                 self._reply(404, b"use /frame ou /clip")
                 return
             try:
-                body, content_type = self._produce(kind, urllib.parse.parse_qs(parsed.query))
+                body, content_type, headers = self._produce(
+                    kind, urllib.parse.parse_qs(parsed.query))
             except BadRequest as error:
                 self._reply(400, str(error).encode())
             except urllib.error.HTTPError as error:
@@ -264,7 +343,7 @@ def make_handler(jellyfin: JellyfinClient, mappings: list, extra_filter: str = "
             except (urllib.error.URLError, RuntimeError, subprocess.TimeoutExpired) as error:
                 self._reply(502, f"falha: {error}".encode())
             else:
-                self._reply(200, body, content_type)
+                self._reply(200, body, content_type, headers)
 
     return Handler
 
