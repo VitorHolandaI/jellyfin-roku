@@ -55,6 +55,23 @@ plugin do Jellyfin.
   clipe. Um clipe de 0,5 s leva cerca de 0,7 s e pesa ~34 KB. O `ffprobe` (tamanho e cor)
   roda uma vez por arquivo e fica em cache.
 
+## Baixar o quadro no celular (`/qr` e `/save`)
+O app pede `GET /qr` com a mesma query de `/frame` (inclusive `api_key`) e recebe um PNG
+de QR code. O QR aponta para `http://<host>/save?id=<8 hex>`, um link que **nao carrega o
+token**: o servidor guarda o pedido em memoria por `GRANT_TTL_SECONDS` (30 min). O
+cabecalho `X-Qr-Url` mostra o link para depurar com `curl`.
+
+`GET /save?id=...` devolve `image/jpeg` com `Content-Disposition: attachment` e nome
+`quadro-<t>s-<L>x<A>.jpg`. O JPEG sai nos **pixels nativos do recorte** (960x540 num zoom
+4x de um 4K, sem esticar) e, se o filme for HDR, passa por tone mapping `zscale`+`tonemap`
+para SDR — JPEG nao carrega PQ e o celular abriria a foto escura.
+
+- Dependencia extra: o binario `qrencode` (pacote `qrencode`). Sem ele `/qr` responde 502
+  com a mensagem dizendo o que instalar.
+- Link vencido ou id inventado responde 404 "desconhecido ou vencido, gere o QR de novo".
+- Funcoes puras novas: `build_save_args`, `save_scale`, `save_filename`, `build_qr_args`;
+  estado testavel em `DownloadGrants` (TTL com `now` injetavel).
+
 ## Como usar
 Suba no mesmo host do Jellyfin, ligado ao IP da LAN (nao em `0.0.0.0` sem necessidade):
 

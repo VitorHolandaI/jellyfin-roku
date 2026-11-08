@@ -11,6 +11,7 @@ import argparse
 import functools
 import json
 import re
+import secrets
 import subprocess
 import tempfile
 import threading
@@ -37,10 +38,23 @@ CLIP_FPS = 24
 CLIP_FRAMES = CLIP_FPS // 2
 MIN_CLIP_BYTES = 1024
 PROBE_ENTRIES = "stream=width,height,color_transfer,color_primaries"
+# Link do QR vive meia hora: da tempo de escanear e baixar sem virar porta aberta.
+GRANT_TTL_SECONDS = 1800
+QR_MODULE_SIZE = 12
+QR_MARGIN = 2
+QR_TIMEOUT_SECONDS = 5
+# HDR nao cabe em JPEG; sem mapear o tom o celular abre a foto escura/lavada.
+TONEMAP_FILTER = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
+                  "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuvj420p")
+SAVE_JPEG_QUALITY = "2"
 
 
 class BadRequest(ValueError):
     """Parametro invalido; a mensagem diz o valor recebido e o esperado."""
+
+
+class ExpiredLink(ValueError):
+    """Link de download que nao existe mais (ou nunca existiu)."""
 
 
 def parse_frame_query(query: dict) -> dict:
@@ -191,6 +205,35 @@ def build_clip_args(media_file: Path, params: dict, output: Path,
             *codec, *colour, "-movflags", "+faststart", str(output)]
 
 
+def save_scale(info: dict, params: dict) -> str:
+    """Mantem os pixels nativos do recorte; HDR vira SDR com tone mapping."""
+    native_width, _ = crop_source_px(info, params)
+    if is_hdr_transfer(info["transfer"]):
+        return f"scale={native_width}:-2:flags=lanczos,{TONEMAP_FILTER}"
+    return f"scale={native_width}:-2:{SCALE_COLOR}"
+
+
+def build_save_args(media_file: Path, params: dict, info: dict) -> list:
+    """JPEG do recorte para o celular baixar: um quadro, qualidade alta."""
+    crop = (f"crop=iw*{params['w']}:ih*{params['h']}:"
+            f"iw*{params['x']}:ih*{params['y']},")
+    return ["ffmpeg", "-v", "error", "-ss", f"{params['t']:.3f}", "-i", str(media_file),
+            "-frames:v", "1", "-vf", crop + save_scale(info, params),
+            "-q:v", SAVE_JPEG_QUALITY, "-f", "image2pipe", "-c:v", "mjpeg", "pipe:1"]
+
+
+def save_filename(params: dict, info: dict) -> str:
+    """Nome do arquivo baixado, com o tempo e o tamanho nativo do recorte."""
+    width, height = crop_source_px(info, params)
+    return f"quadro-{params['t']:.1f}s-{width}x{height}.jpg"
+
+
+def build_qr_args(text: str) -> list:
+    """argv do qrencode: PNG no stdout, modulos grandes o bastante para a TV."""
+    return ["qrencode", "-t", "PNG", "-o", "-",
+            "-s", str(QR_MODULE_SIZE), "-m", str(QR_MARGIN), text]
+
+
 def parse_range(header: str | None, size: int) -> tuple | None:
     """Interpreta 'bytes=a-b' (b opcional); None se nao houver cabecalho."""
     if header is None:
@@ -254,6 +297,40 @@ class FrameCache:
                 self.entries.popitem(last=False)
 
 
+class DownloadGrants:
+    """Links temporarios de download: o QR nao carrega o token do Jellyfin."""
+
+    def __init__(self, ttl_seconds: int = GRANT_TTL_SECONDS) -> None:
+        self.ttl_seconds = ttl_seconds
+        self.entries: dict = {}
+        self.lock = threading.Lock()
+
+    def add(self, params: dict, media_file: Path, now: float | None = None) -> str:
+        created = time.time() if now is None else now
+        grant_id = secrets.token_hex(4)
+        with self.lock:
+            self._drop_expired(created)
+            self.entries[grant_id] = (params, media_file, created + self.ttl_seconds)
+        return grant_id
+
+    def get(self, grant_id: str, now: float | None = None) -> tuple | None:
+        current = time.time() if now is None else now
+        with self.lock:
+            entry = self.entries.get(grant_id)
+            if entry is None:
+                return None
+            params, media_file, expires = entry
+            if expires < current:
+                del self.entries[grant_id]
+                return None
+            return params, media_file
+
+    def _drop_expired(self, now: float) -> None:
+        expired = [key for key, entry in self.entries.items() if entry[2] < now]
+        for key in expired:
+            del self.entries[key]
+
+
 def render_frame(media_file: Path, params: dict, gate: threading.Semaphore,
                  extra_filter: str = "") -> bytes:
     with gate:
@@ -280,8 +357,33 @@ def render_clip(media_file: Path, params: dict, gate: threading.Semaphore,
     return data
 
 
+def render_save(media_file: Path, params: dict, info: dict,
+                gate: threading.Semaphore) -> bytes:
+    with gate:
+        result = subprocess.run(build_save_args(media_file, params, info),
+                                capture_output=True,
+                                timeout=FFMPEG_TIMEOUT_SECONDS * 2, check=False)
+    if result.returncode != 0 or not result.stdout:
+        raise RuntimeError(f"ffmpeg falhou ({result.returncode}): {result.stderr.decode()[:200]}")
+    return result.stdout
+
+
+def render_qr(text: str) -> bytes:
+    try:
+        result = subprocess.run(build_qr_args(text), capture_output=True,
+                                timeout=QR_TIMEOUT_SECONDS, check=False)
+    except FileNotFoundError:
+        raise RuntimeError(
+            "qrencode nao encontrado, esperado o binario do pacote 'qrencode'") from None
+    if result.returncode != 0 or not result.stdout:
+        raise RuntimeError(
+            f"qrencode falhou ({result.returncode}): {result.stderr.decode()[:200]}")
+    return result.stdout
+
+
 def make_handler(jellyfin: JellyfinClient, mappings: list, extra_filter: str = "") -> type:
     cache, gate = FrameCache(), threading.Semaphore(MAX_PARALLEL_FFMPEG)
+    grants = DownloadGrants()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: object) -> None:
@@ -327,15 +429,49 @@ def make_handler(jellyfin: JellyfinClient, mappings: list, extra_filter: str = "
             content_type = "video/mp4" if kind == "clip" else "image/jpeg"
             return body, content_type, frame_headers(info, params)
 
+        def _handle_qr(self, query: dict) -> tuple:
+            params = parse_frame_query(query)
+            token = query.get("api_key", [""])[0]
+            jellyfin.check_token(token)
+            media_file = map_media_path(jellyfin.item_path(params["item"], token), mappings)
+            grant_id = grants.add(params, media_file)
+            url = f"http://{self._host()}/save?id={grant_id}"
+            return render_qr(url), "image/png", {"X-Qr-Url": url}
+
+        def _handle_save(self, query: dict) -> tuple:
+            grant_id = query.get("id", [""])[0]
+            entry = grants.get(grant_id)
+            if entry is None:
+                raise ExpiredLink(
+                    f"id={grant_id!r} desconhecido ou vencido, gere o QR de novo")
+            params, media_file = entry
+            info = probe_video_info(media_file)
+            body = render_save(media_file, params, info, gate)
+            filename = save_filename(params, info)
+            return body, "image/jpeg", {
+                "Content-Disposition": f'attachment; filename="{filename}"'}
+
+        def _host(self) -> str:
+            return self.headers.get("Host") or "%s:%s" % self.server.server_address
+
+        def _dispatch(self, kind: str, query: dict) -> tuple:
+            if kind in ("frame", "clip"):
+                return self._produce(kind, query)
+            if kind == "qr":
+                return self._handle_qr(query)
+            return self._handle_save(query)
+
         def do_GET(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
             kind = parsed.path.lstrip("/")
-            if kind not in ("frame", "clip"):
-                self._reply(404, b"use /frame ou /clip")
+            if kind not in ("frame", "clip", "qr", "save"):
+                self._reply(404, b"use /frame, /clip, /qr ou /save")
                 return
             try:
-                body, content_type, headers = self._produce(
+                body, content_type, headers = self._dispatch(
                     kind, urllib.parse.parse_qs(parsed.query))
+            except ExpiredLink as error:
+                self._reply(404, str(error).encode())
             except BadRequest as error:
                 self._reply(400, str(error).encode())
             except urllib.error.HTTPError as error:

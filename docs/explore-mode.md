@@ -18,9 +18,9 @@ Os commits estao na branch `staging`; nada foi enviado ao repositorio oficial.
 ## Modo Explorar
 Botao `exploreMode` na ultima posicao das opcoes do player. Teclas: canal+ ou avancar
 aproxima; canal- ou voltar rapido afasta; Replay alterna mira e quadrantes; setas movem
-(nas bordas deslocam o recorte); OK nos quadrantes amplia; Voltar zera o zoom e depois
-sai; Play sai e retoma o filme. Zooms: 1, 1.5, 2, 3, 4, 6 e 8x
-(`source/utils/exploreMath.bs`).
+(nas bordas deslocam o recorte); OK nos quadrantes amplia; **OK na mira mostra um QR para
+baixar aquele quadro no celular**; Voltar zera o zoom e depois sai; Play sai e retoma o
+filme. Zooms: 1, 1.5, 2, 3, 4, 6 e 8x (`source/utils/exploreMath.bs`).
 
 ### Como funciona
 O app nao amplia o video da TV. Ele pede ao `tools/frame-server` um **clipe MP4 de um

@@ -226,5 +226,74 @@ class CheckClipOutputTest(unittest.TestCase):
         frame_server.check_clip_output(b"x" * 2000, self.PARAMS)
 
 
+class DownloadGrantsTest(unittest.TestCase):
+    PARAMS = {"t": 12.5, "x": 0.25, "y": 0.25, "w": 0.5, "h": 0.5, "out": 3840}
+    FILE = Path("/media/a.mp4")
+
+    def test_grants_are_short_random_ids(self) -> None:
+        grants = frame_server.DownloadGrants()
+        grant_id = grants.add(self.PARAMS, self.FILE)
+        self.assertEqual(len(grant_id), 8)
+        self.assertRegex(grant_id, r"^[0-9a-f]+$")
+        first, second = grants.add(self.PARAMS, self.FILE), grants.add(self.PARAMS, self.FILE)
+        self.assertNotEqual(first, second)
+
+    def test_returns_the_stored_params_until_expiry(self) -> None:
+        grants = frame_server.DownloadGrants(ttl_seconds=60)
+        grant_id = grants.add(self.PARAMS, self.FILE, now=1000.0)
+        self.assertEqual(grants.get(grant_id, now=1059.0), (self.PARAMS, self.FILE))
+
+    def test_expired_grant_is_forgotten(self) -> None:
+        grants = frame_server.DownloadGrants(ttl_seconds=60)
+        grant_id = grants.add(self.PARAMS, self.FILE, now=1000.0)
+        self.assertIsNone(grants.get(grant_id, now=1061.0))
+        self.assertIsNone(grants.get(grant_id, now=1001.0))
+
+    def test_unknown_id_is_none(self) -> None:
+        self.assertIsNone(frame_server.DownloadGrants().get("naoexiste"))
+
+
+class BuildSaveArgsTest(unittest.TestCase):
+    PARAMS = {"t": 12.5, "x": 0.25, "y": 0.25, "w": 0.25, "h": 0.25, "out": 3840}
+    SDR = {"width": 3840, "height": 2160, "transfer": "bt709", "primaries": "bt709"}
+    HDR = {"width": 3840, "height": 2160, "transfer": "smpte2084", "primaries": "bt2020"}
+
+    def test_save_keeps_the_native_crop_width(self) -> None:
+        args = frame_server.build_save_args(Path("/a.mp4"), self.PARAMS, self.SDR)
+        graph = args[args.index("-vf") + 1]
+        self.assertIn("crop=iw*0.25:ih*0.25:iw*0.25:ih*0.25", graph)
+        self.assertIn("scale=960:-2", graph)
+        self.assertIn("in_color_matrix=bt709", graph)
+
+    def test_hdr_save_is_tonemapped_to_sdr(self) -> None:
+        args = frame_server.build_save_args(Path("/a.mp4"), self.PARAMS, self.HDR)
+        graph = args[args.index("-vf") + 1]
+        self.assertIn("tonemap=hable", graph)
+        self.assertIn("zscale=t=bt709:m=bt709:r=tv", graph)
+        self.assertNotIn("in_color_matrix", graph)
+
+    def test_save_is_a_single_jpeg_on_stdout(self) -> None:
+        args = frame_server.build_save_args(Path("/a.mp4"), self.PARAMS, self.SDR)
+        self.assertEqual(args[args.index("-frames:v") + 1], "1")
+        self.assertEqual(args[-1], "pipe:1")
+        self.assertEqual(args[args.index("-c:v") + 1], "mjpeg")
+
+
+class SaveFilenameTest(unittest.TestCase):
+    def test_name_carries_time_and_native_size(self) -> None:
+        info = {"width": 3840, "height": 2160, "transfer": "bt709", "primaries": "bt709"}
+        params = {"t": 340.533, "x": 0.0, "y": 0.0, "w": 0.25, "h": 0.25, "out": 3840}
+        self.assertEqual(frame_server.save_filename(params, info), "quadro-340.5s-960x540.jpg")
+
+
+class BuildQrArgsTest(unittest.TestCase):
+    def test_qr_is_a_png_on_stdout(self) -> None:
+        args = frame_server.build_qr_args("http://192.168.0.26:8790/save?id=abc")
+        self.assertEqual(args[0], "qrencode")
+        self.assertEqual(args[args.index("-t") + 1], "PNG")
+        self.assertEqual(args[args.index("-o") + 1], "-")
+        self.assertEqual(args[-1], "http://192.168.0.26:8790/save?id=abc")
+
+
 if __name__ == "__main__":
     unittest.main()

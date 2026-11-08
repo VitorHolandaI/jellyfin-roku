@@ -27,6 +27,9 @@ sub init()
     m.errorText = m.top.findNode("errorText")
     m.stageClip = m.top.findNode("stageClip")
     m.backdrop = m.top.findNode("backdrop")
+    m.qrPanel = m.top.findNode("qrPanel")
+    m.qrImage = m.top.findNode("qrImage")
+    m.qrError = m.top.findNode("qrError")
 end sub
 
 ' params = { itemId, position (s), baseUrl, token, videoWidth, videoHeight }
@@ -39,6 +42,9 @@ sub begin(params as object)
     m.cursorU = 0.5
     m.cursorV = 0.5
     m.quadrant = 0
+    m.qrVisible = false
+    m.qrPanel.visible = false
+    m.qrImage.uri = ""
     m.videoWidth = 0
     m.videoHeight = 0
     if params.videoWidth <> invalid then m.videoWidth = params.videoWidth
@@ -158,6 +164,10 @@ sub layoutStage()
 end sub
 
 function handleKey(key as string) as boolean
+    if m.qrVisible
+        if key = KeyCode.BACK or key = KeyCode.OK then closeQr()
+        return true
+    end if
     if key = KeyCode.PLAY
         m.top.resume = true
         requestExit()
@@ -204,7 +214,9 @@ sub handleQuadrantKey(key as string)
 end sub
 
 sub handleCursorKey(key as string)
-    if key = KeyCode.CHANNELUP or key = KeyCode.FASTFORWRD
+    if key = KeyCode.OK
+        showQr()
+    else if key = KeyCode.CHANNELUP or key = KeyCode.FASTFORWRD
         changeZoom(1)
     else if key = KeyCode.CHANNELDOWN or key = KeyCode.REWIND
         changeZoom(-1)
@@ -216,6 +228,35 @@ sub handleCursorKey(key as string)
         moveCursor(0, -cursorStep)
     else if key = KeyCode.DOWN
         moveCursor(0, cursorStep)
+    end if
+end sub
+
+' QR aponta para um link curto no servico de quadros; o token do Jellyfin fica
+' fora da imagem (o servico guarda o pedido por meia hora).
+function buildQrUrl() as string
+    p = m.params
+    return m.frameBase + "/qr?item=" + p.itemId + "&t=" + formatNumber(p.position) + "&x=" + formatNumber(m.region.x) + "&y=" + formatNumber(m.region.y) + "&w=" + formatNumber(m.region.w) + "&h=" + formatNumber(m.region.h) + "&api_key=" + p.token
+end function
+
+sub showQr()
+    m.qrError.visible = false
+    m.qrImage.unobserveFieldScoped("loadStatus")
+    m.qrImage.observeFieldScoped("loadStatus", "onQrLoadStatus")
+    m.qrImage.uri = buildQrUrl()
+    m.qrPanel.visible = true
+    m.qrVisible = true
+end sub
+
+sub closeQr()
+    m.qrPanel.visible = false
+    m.qrVisible = false
+    m.qrImage.uri = ""
+end sub
+
+sub onQrLoadStatus()
+    if m.qrImage.loadStatus = "failed"
+        m.qrError.text = "Nao consegui gerar o QR em " + m.frameBase + " (servico de quadros ligado? qrencode instalado?)"
+        m.qrError.visible = true
     end if
 end sub
 
@@ -265,7 +306,7 @@ sub render()
     if m.mode = "quadrants"
         m.hintText.text = "Setas: escolher   OK: ampliar   Replay: mira   Voltar: sair   Play: continuar filme"
     else
-        m.hintText.text = "Setas: mover   CH+: aproximar   CH-: afastar   Replay: quadrantes   Voltar: sair"
+        m.hintText.text = "Setas: mover   CH+/-: zoom   OK: QR do quadro   Replay: quadrantes   Voltar: sair"
     end if
 end sub
 
