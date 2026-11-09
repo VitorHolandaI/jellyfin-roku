@@ -1,12 +1,14 @@
-' Modo Explorar: com o filme pausado, mostra uma FOTO do quadro (pedida ao servico
-' de quadros, scripts/frame_server.py) e deixa ampliar/mover com uma mira. O video
+' Modo Explorar: com o filme pausado, mostra uma FOTO do quadro (pedida ao plugin
+' Jellyfin.Plugin.Explore, rota /Plugins/Explore) e deixa ampliar/mover com uma mira. O video
 ' da TV nunca e redimensionado (isso distorcia a imagem na SEMP).
 ' A matematica fica em source/utils/exploreMath.bs; aqui ha estado, teclas e desenho.
 
 import "pkg:/source/enums/KeyCode.bs"
 import "pkg:/source/utils/exploreMath.bs"
 
-const framePort = 8790
+' O Explorar e um plugin do proprio Jellyfin (Jellyfin.Plugin.Explore): as rotas ficam
+' sob /Plugins/Explore, com a autenticacao do Jellyfin (token na query, `ApiKey`).
+const pluginPath = "/Plugins/Explore"
 ' true: o recorte vem como MP4 de um quadro tocado no plano de video (mesma cor
 ' do filme); false: JPEG em Poster (cor diferente, mas sem tela preta ao trocar).
 const useClipVideo = true
@@ -66,11 +68,15 @@ sub begin(params as object)
     render()
 end sub
 
-' http://192.168.0.26:8096 -> http://192.168.0.26:8790
+' Usa o mesmo endereco do servidor que o app ja tem (session.server.url), sem porta extra:
+' http://servidor:8096/ -> http://servidor:8096/Plugins/Explore
 function frameServiceBase(serverUrl as string) as string
-    match = CreateObject("roRegex", "^(https?://[^/:]+)", "").Match(serverUrl)
-    if match.count() < 2 then return ""
-    return match[1] + ":" + framePort.toStr()
+    base = serverUrl.trim()
+    if base = "" then return ""
+    while base.right(1) = "/"
+        base = base.left(base.len() - 1)
+    end while
+    return base + pluginPath
 end function
 
 function formatNumber(value as float) as string
@@ -79,7 +85,7 @@ end function
 
 function buildFrameUrl(region as object) as string
     p = m.params
-    return m.frameBase + "/frame?item=" + p.itemId + "&t=" + formatNumber(p.position) + "&x=" + formatNumber(region.x) + "&y=" + formatNumber(region.y) + "&w=" + formatNumber(region.w) + "&h=" + formatNumber(region.h) + "&out=3840&api_key=" + p.token
+    return m.frameBase + "/frame?item=" + p.itemId + "&t=" + formatNumber(p.position) + "&x=" + formatNumber(region.x) + "&y=" + formatNumber(region.y) + "&w=" + formatNumber(region.w) + "&h=" + formatNumber(region.h) + "&out=3840&ApiKey=" + p.token
 end function
 
 sub requestRegion(region as object)
@@ -128,7 +134,7 @@ end sub
 sub onFrameLoadStatus()
     status = m.loading.loadStatus
     if status = "failed"
-        showError("Nao consegui buscar o quadro em " + m.frameBase + " (servico de quadros ligado? token valido?)")
+        showError("Nao consegui buscar o quadro em " + m.frameBase + " (plugin Explore instalado? token valido?)")
         return
     end if
     if status <> "ready" then return
@@ -231,11 +237,11 @@ sub handleCursorKey(key as string)
     end if
 end sub
 
-' QR aponta para um link curto no servico de quadros; o token do Jellyfin fica
-' fora da imagem (o servico guarda o pedido por meia hora).
+' QR aponta para um link curto do plugin; o token do Jellyfin fica fora da imagem
+' (o plugin guarda o pedido por meia hora).
 function buildQrUrl() as string
     p = m.params
-    return m.frameBase + "/qr?item=" + p.itemId + "&t=" + formatNumber(p.position) + "&x=" + formatNumber(m.region.x) + "&y=" + formatNumber(m.region.y) + "&w=" + formatNumber(m.region.w) + "&h=" + formatNumber(m.region.h) + "&api_key=" + p.token
+    return m.frameBase + "/qr?item=" + p.itemId + "&t=" + formatNumber(p.position) + "&x=" + formatNumber(m.region.x) + "&y=" + formatNumber(m.region.y) + "&w=" + formatNumber(m.region.w) + "&h=" + formatNumber(m.region.h) + "&ApiKey=" + p.token
 end function
 
 sub showQr()
@@ -255,7 +261,7 @@ end sub
 
 sub onQrLoadStatus()
     if m.qrImage.loadStatus = "failed"
-        m.qrError.text = "Nao consegui gerar o QR em " + m.frameBase + " (servico de quadros ligado? qrencode instalado?)"
+        m.qrError.text = "Nao consegui gerar o QR em " + m.frameBase + " (plugin Explore instalado? token valido?)"
         m.qrError.visible = true
     end if
 end sub

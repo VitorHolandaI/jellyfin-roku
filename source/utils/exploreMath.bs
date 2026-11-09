@@ -3,7 +3,7 @@
 '
 ' Uma "regiao" e { x, y, w, h } em fracoes do quadro do filme (0..1). w = h = 1/zoom,
 ' entao o recorte tem a mesma proporcao do filme. A foto da regiao e pedida ao
-' servico de quadros e desenhada no "palco" (retangulo onde o quadro cabe na tela).
+' plugin Explore e desenhada no "palco" (retangulo onde o quadro cabe na tela).
 
 function exploreScreenSize() as object
     return { w: 1920, h: 1080 }

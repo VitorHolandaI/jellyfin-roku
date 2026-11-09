@@ -12,6 +12,9 @@ plugin do Jellyfin.
   `../../components/video/VideoPlayerView.bs` toca essa URL no proprio no de video
   (`onExploreClipRequested`). O caminho `/frame` (JPEG) existe como alternativa
   (`useClipVideo = false` no overlay).
+- **Substituido por:** o plugin `Jellyfin.Plugin.Explore` (repo a parte), que serve as
+  mesmas quatro rotas em `/Plugins/Explore` no proprio Jellyfin. Este servico fica como
+  referencia do contrato HTTP.
 - **Fala com:** o Jellyfin (`--jellyfin`) para validar o token e descobrir o caminho do
   item, e o `ffmpeg`/`ffprobe` do sistema para gerar os quadros.
 

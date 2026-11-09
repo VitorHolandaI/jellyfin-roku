@@ -23,18 +23,22 @@ baixar aquele quadro no celular**; Voltar zera o zoom e depois sai; Play sai e r
 filme. Zooms: 1, 1.5, 2, 3, 4, 6 e 8x (`source/utils/exploreMath.bs`).
 
 ### Como funciona
-O app nao amplia o video da TV. Ele pede ao `tools/frame-server` um **clipe MP4 de um
-quadro** ja recortado (3840 px de largura) e toca no proprio no de video do player,
-pausado no primeiro quadro. O filme e a posicao ficam guardados e voltam ao sair.
+O app nao amplia o video da TV. Ele pede ao plugin **Jellyfin.Plugin.Explore** um **clipe
+MP4 de um quadro** ja recortado e toca no proprio no de video do player, pausado no
+primeiro quadro. O filme e a posicao ficam guardados e voltam ao sair.
 - `components/video/ExploreOverlay.bs/.xml`: estado, teclas e interface. O rodape mostra
   `Zoom Nx - fonte LxA px`: os pixels **nativos** que aquele recorte tem (um zoom 4x de
   um quadro 4K mostra so 960x540 de origem, esticados). O palco usa a proporcao real do
   filme (`streamInfo` do player), nao 16:9 fixo.
 - `components/video/VideoPlayerView.bs`: troca e restaura o conteudo; durante o Explorar
   ignora estado, posicao, buffer e relatorio de reproducao.
-- `tools/frame-server/`: o servico (contrato HTTP no README da pasta). HDR (PQ ou HLG)
-  sai em HEVC 10 bits com as tags de cor do filme; SDR em H.264 sem converter a cor. A
-  resposta traz `X-Crop-Source-Px` e `X-Source-Width` para conferir o recorte por `curl`.
+- `Jellyfin.Plugin.Explore` (repo `jellyfin-plugin-explore`): as rotas ficam em
+  `/Plugins/Explore` no mesmo host e porta do Jellyfin, autenticadas pelo token do app
+  (`ApiKey` na query, porque `Video` e `Poster` nao mandam header). HDR (PQ ou HLG) sai
+  em HEVC 10 bits com as tags de cor do filme; SDR em H.264 sem converter a cor. A
+  largura de saida nunca passa de 2x os pixels nativos do recorte.
+- `tools/frame-server/`: o servico Python que o plugin substituiu; fica como referencia
+  do contrato HTTP.
 - A constante `useClipVideo` no overlay volta ao JPEG em `Poster` quando e `false`.
 
 ### Por que assim
@@ -56,9 +60,11 @@ pausado no primeiro quadro. O filme e a posicao ficam guardados e voltam ao sair
 1. `npm run build` (gera `build/staging`).
 2. Enviar para a TV em modo desenvolvedor (instalador em `http://<ip-da-tv>`, usuario
    `rokudev`).
-3. Subir o servico de quadros ao lado do Jellyfin; exemplo no `README.md` de
-   `tools/frame-server`. Sem ele, o Explorar mostra erro.
-4. Testes do servico: `python3 -m unittest test_frame_server` dentro de `tools/frame-server`.
+3. Instalar o plugin `Jellyfin.Plugin.Explore` na pasta `plugins/` do servidor e reiniciar
+   o Jellyfin. Sem ele, o Explorar mostra erro. O app descobre host e porta pelo proprio
+   endereco do servidor; nao ha IP nem porta fixos no codigo.
+4. Referencia do contrato HTTP: `README.md` de `tools/frame-server` (servico Python que o
+   plugin substituiu).
 
 ## Pendente
 - Tempo de troca de zoom: o encode caiu de 2,3 s (96 quadros) para 0,7 s (12 quadros) e agora
