@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="HeroDetailsTask" extends="Task">
+  <interface>
+    <field id="itemId" type="string" />
+    <field id="content" type="assocarray" alwaysNotify="true" />
+  </interface>
+</component>

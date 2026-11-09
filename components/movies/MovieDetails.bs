@@ -147,8 +147,8 @@ sub onMovieExtrasHasItems()
 end sub
 
 sub setButtonColors()
-    m.buttonGrp.focusBitmapUri = "pkg:/images/white.9.png"
-    m.buttonGrp.focusBitmapBlendColor = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
+    m.buttonGrp.focusBitmapUri = "pkg:/images/brand/pill-focus.9.png"
+    m.buttonGrp.focusBitmapBlendColor = "0xFFFFFFFF"
 end sub
 
 ' OnScreenShown: Callback function when view is presented on screen

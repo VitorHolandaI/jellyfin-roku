@@ -106,6 +106,12 @@
         width="100" />
     </Rectangle>
 
+    <ExploreOverlay id="explore" visible="false" />
+
+    <Text id="playbackModeBadge" visible="false" font="font:SmallSystemFont" color="#ffffff" horizAlign="right" width="900" translation="[980,40]" />
+
+    <Timer id="modeBadgeTimer" repeat="false" duration="5" />
+
     <Timer id="fastForwardOrRewindTimer" repeat="true" duration="0.3" />
     <Timer id="spinnerPercentTimer" repeat="true" duration="0.15" />
     <Timer id="leftTenSecondSkipTimer" repeat="true" duration="0.5" />

@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="Home" extends="JFScreen">
   <children>
+    <JellyfishBackground id="deepSea" opacity="0.5" />
+    <Poster id="heroBackdrop" loadDisplayMode="scaleToZoom" width="1920" height="1080" opacity="0" />
+    <Poster id="heroShade" uri="pkg:/images/brand/hero-shade.png" width="1920" height="1080" />
+    <Text id="heroTitle" font="font:MediumBoldSystemFont" color="#ffffff" translation="[760,90]" width="880" height="44" ellipsis="true" opacity="0" />
+    <Text id="heroOverview" maxLines="2" font="font:SmallSystemFont" color="#b8c4e6" translation="[760,136]" width="880" height="84" wrap="true" lineSpacing="2" opacity="0" />
     <Poster id="backdrop" loadDisplayMode="scaleToZoom" width="1920" height="1200" />
 
     <LayoutGroup id="buttons" translation="[100, 100]" layoutDirection="horiz" horizAlignment="left" itemSpacings="[25]">
@@ -12,8 +17,8 @@
         icon="pkg:/images/icons/search-light.png"
         focusIcon="pkg:/images/icons/search-light.png"
         text="Search"
-        height="50"
-        width="200" />
+        height="56"
+        width="230" />
       <TextButton
         id="settingsButton"
         iconSide="left"
@@ -22,8 +27,8 @@
         icon="pkg:/images/icons/settings.png"
         focusIcon="pkg:/images/icons/settings.png"
         text="Settings"
-        height="50"
-        width="200" />
+        height="56"
+        width="330" />
     </LayoutGroup>
 
     <HomeRows
@@ -35,6 +40,13 @@
       numRows="2"
       rowLabelOffset="[[0,20]]" />
     <OptionsSlider id="options" />
+
+    <Timer id="heroTimer" duration="0.4" repeat="false" />
+    <Animation id="heroFade" duration="0.8" repeat="false" easeFunction="outQuad">
+      <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 0.55]" fieldToInterp="heroBackdrop.opacity" />
+      <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="heroTitle.opacity" />
+      <FloatFieldInterpolator key="[0.0, 1.0]" keyValue="[0.0, 1.0]" fieldToInterp="heroOverview.opacity" />
+    </Animation>
 
     <Animation id="toggleButtonsAnimation" duration=".7" repeat="false" easeFunction="linear">
       <FloatFieldInterpolator id="buttonsFade" key="[0.0, .6]" keyValue="[1.00, 0.00]" fieldToInterp="buttons.opacity" />

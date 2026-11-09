@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ExploreOverlay" extends="Group">
+  <interface>
+    <field id="resume" type="boolean" value="false" />
+    <field id="exitRequested" type="boolean" alwaysNotify="true" />
+    <field id="clipUrl" type="string" alwaysNotify="true" />
+    <field id="playerState" type="string" alwaysNotify="true" onChange="onClipState" />
+    <field id="playerError" type="string" />
+    <function name="begin" />
+    <function name="handleKey" />
+  </interface>
+  <children>
+    <Rectangle id="backdrop" color="0x000000FF" width="1920" height="1080" />
+
+    <Group id="stageClip">
+      <Poster id="imageA" visible="false" />
+      <Poster id="imageB" visible="false" />
+    </Group>
+
+    <Group id="quadrantGrid" visible="false">
+      <Rectangle id="quadrantHighlight" color="0x00A4DC3A" />
+      <Rectangle id="gridVertical" color="0xFFFFFF77" width="3" />
+      <Rectangle id="gridHorizontal" color="0xFFFFFF77" height="3" />
+    </Group>
+
+    <Poster id="crosshair" uri="pkg:/images/brand/crosshair.png" width="120" height="120" />
+
+    <Poster uri="pkg:/images/brand/pill.9.png" blendColor="0x000000B4" width="1080" height="56" translation="[60,40]" />
+    <Text id="infoText" font="font:MediumBoldSystemFont" color="#ffffff" translation="[92,46]" />
+
+    <Poster uri="pkg:/images/brand/pill.9.png" blendColor="0x000000B4" width="1560" height="56" translation="[180,980]" />
+    <Text id="hintText" font="font:SmallSystemFont" color="#cfd8ff" horizAlign="center" width="1560" translation="[180,990]" />
+
+    <Text id="errorText" visible="false" font="font:MediumSystemFont" color="#ff9a99" horizAlign="center" wrap="true" maxLines="3" width="1400" height="140" translation="[260,440]" />
+
+    <Group id="qrPanel" visible="false">
+      <Rectangle color="0x000000EE" width="1920" height="1080" />
+      <Text id="qrTitle" font="font:MediumBoldSystemFont" color="#ffffff" horizAlign="center" width="1920" translation="[0,120]" text="Escaneie para baixar este quadro" />
+      <Poster id="qrImage" width="600" height="600" translation="[660,240]" />
+      <Text id="qrHint" font="font:SmallSystemFont" color="#cfd8ff" horizAlign="center" width="1920" translation="[0,880]" text="Voltar: fechar" />
+      <Text id="qrError" visible="false" font="font:SmallSystemFont" color="#ff9a99" horizAlign="center" width="1800" wrap="true" maxLines="2" translation="[60,860]" />
+    </Group>
+  </children>
+</component>

@@ -1,0 +1,28 @@
+' Busca a sinopse (Overview) do item em destaque na Home. A lista da fileira
+' traz so um resumo do item, sem esse campo.
+import "pkg:/source/api/sdk.bs"
+import "pkg:/source/utils/misc.bs"
+
+sub init()
+    m.top.functionName = "loadOverview"
+end sub
+
+sub loadOverview()
+    result = { id: m.top.itemId, overview: "" }
+    if not isValidAndNotEmpty(m.top.itemId)
+        m.top.content = result
+        return
+    end if
+
+    params = {
+        "Ids": m.top.itemId,
+        "Fields": "Overview",
+        "UserId": m.global.session.user.id
+    }
+    data = api.items.Get(params)
+    items = chainLookup(data, "Items")
+    if isValidAndNotEmpty(items)
+        result.overview = chainLookupReturn(items[0], "Overview", "")
+    end if
+    m.top.content = result
+end sub

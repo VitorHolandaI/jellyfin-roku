@@ -1,0 +1,8 @@
+' Fundo de identidade do app: manchas de luz roxo/ciano que derivam devagar.
+' As animacoes rodam em loop; sem texto ou foco, so decoracao.
+
+sub init()
+    m.top.findNode("driftPurple").control = "start"
+    m.top.findNode("driftCyan").control = "start"
+    m.top.findNode("driftBlue").control = "start"
+end sub

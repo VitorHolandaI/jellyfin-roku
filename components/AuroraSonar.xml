@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="AuroraSonar" extends="Group">
+  <interface>
+    <field id="running" type="boolean" value="false" onChange="onRunningChange" />
+  </interface>
+  <children>
+    <Poster id="ringA" uri="pkg:/images/brand/sonar-ring.png" width="360" height="360" translation="[0,0]" scaleRotateCenter="[180,180]" scale="[0.2,0.2]" opacity="0" />
+    <Poster id="ringB" uri="pkg:/images/brand/sonar-ring.png" width="360" height="360" translation="[0,0]" scaleRotateCenter="[180,180]" scale="[0.2,0.2]" opacity="0" />
+    <Poster id="dot" uri="pkg:/images/brand/logo-gradient.png" width="64" height="62" translation="[148,149]" />
+
+    <Animation id="pulseA" duration="2.8" repeat="true" easeFunction="outQuad">
+      <Vector2DFieldInterpolator key="[0.0, 1.0]" keyValue="[[0.2,0.2],[1.0,1.0]]" fieldToInterp="ringA.scale" />
+      <FloatFieldInterpolator key="[0.0, 0.15, 1.0]" keyValue="[0.0, 0.9, 0.0]" fieldToInterp="ringA.opacity" />
+    </Animation>
+    <Animation id="pulseB" duration="2.8" delay="1.4" repeat="true" easeFunction="outQuad">
+      <Vector2DFieldInterpolator key="[0.0, 1.0]" keyValue="[[0.2,0.2],[1.0,1.0]]" fieldToInterp="ringB.scale" />
+      <FloatFieldInterpolator key="[0.0, 0.15, 1.0]" keyValue="[0.0, 0.9, 0.0]" fieldToInterp="ringB.opacity" />
+    </Animation>
+  </children>
+</component>

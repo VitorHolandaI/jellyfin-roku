@@ -501,7 +501,7 @@
                 "description": "The color of the remote control's cursor.",
                 "settingName": "colorCursor",
                 "type": "colorgrid",
-                "default": "#FF6666"
+                "default": "#AA5CC3"
               },
               {
                 "title": "Primary Text",

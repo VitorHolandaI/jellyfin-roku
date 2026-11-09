@@ -21,6 +21,7 @@
       <IconButton id="chapterList" padding="16" icon="pkg:/images/icons/numberList.png" height="65" width="100" />
       <IconButton id="showSubtitleMenu" padding="0" icon="pkg:/images/icons/subtitle.png" height="65" width="100" />
       <IconButton id="showAudioMenu" padding="27" icon="pkg:/images/icons/musicNote.png" height="65" width="100" />
+      <IconButton id="exploreMode" padding="22" icon="pkg:/images/icons/search-light.png" height="65" width="100" />
     </ButtonGroup>
 
     <ButtonGroup id="videoControls" itemSpacings="[20]" layoutDirection="horiz" horizAlignment="center" translation="[960,950]">
@@ -67,6 +68,7 @@
 
     <Group id="progressBarGroup" translation="[103,875]">
       <Rectangle id="progressBarBackground" width="1714" height="12" />
+      <Rectangle id="bufferBar" width="0" height="12" color="0xFFFFFF66" />
       <Rectangle id="progressBar" width="0" height="12" opacity="0.75" />
       <Poster id="scrubber" uri="pkg:/images/icons/progress-bar-scrubber.png" width="20" height="20" />
       <Poster id="scrubberOldPosition" uri="pkg:/images/icons/progress-bar-scrubber.png" width="20" height="20" />
@@ -113,6 +115,7 @@
     <field id="nextItemTitleText" type="string" />
     <field id="playbackSpeed" type="float" />
     <field id="progressPercentage" type="float" />
+    <field id="bufferedSeconds" type="float" value="0" onChange="onBufferedSecondsChanged" />
     <field id="positionTime" type="float" />
     <field id="previewPos" type="float" />
     <field id="videoEndingTime" type="string" />

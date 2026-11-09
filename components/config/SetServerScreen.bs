@@ -12,11 +12,13 @@ sub init()
     m.serverUrlTextbox = m.top.findNode("serverUrlTextbox")
     m.serverUrlContainer = m.top.findNode("serverUrlContainer")
     m.serverPickerContainer = m.top.findNode("serverPickerContainer")
+    m.serverPickerCard = m.top.findNode("serverPickerCard")
+    m.sonar = m.top.findNode("sonar")
     m.serverUrlOutline = m.top.findNode("serverUrlOutline")
     m.serverUrlOutline.blendColor = ColorPalette.HIGHLIGHT
 
-    m.serverPickerContainer.color = ColorPalette.ELEMENTBACKGROUND
-    m.serverUrlContainer.color = ColorPalette.BLACK77
+    m.serverPickerContainer.color = ColorPalette.TRANSPARENT
+    m.serverUrlContainer.color = "0xFFFFFF18"
 
     m.submit = m.top.findNode("submit")
     m.submit.background = ColorPalette.LIGHTBLUE
@@ -158,6 +160,7 @@ sub ScanForServers()
     m.ssdpScanner = CreateObject("roSGNode", "ServerDiscoveryTask")
     m.ssdpScanner.observeField("content", "ScanForServersComplete")
     m.ssdpScanner.control = TaskControl.RUN
+    m.sonar.running = true
     startLoadingSpinner(false)
 end sub
 
@@ -193,6 +196,8 @@ sub ScanForServersComplete(event)
     end if
 
     m.serverPicker.content = items
+    m.sonar.running = false
+    fitServerCard(m.servers.Count())
     stopLoadingSpinner()
 
     'if we have at least one server, focus on the server picker
@@ -205,6 +210,20 @@ sub ScanForServersComplete(event)
         m.serverUrlOutline.visible = true
     end if
 
+end sub
+
+' O cartao acompanha o numero de servidores (1 a 3 linhas); sem servidores,
+' some, e o foco vai para o campo de URL (tratado abaixo).
+sub fitServerCard(serverCount as integer)
+    rowCount = serverCount
+    if rowCount > 3 then rowCount = 3
+    m.serverPickerContainer.visible = serverCount > 0
+    if serverCount = 0 then return
+
+    cardHeight = 40 + rowCount * 100 + (rowCount - 1) * 30
+    m.serverPickerContainer.height = cardHeight
+    m.serverPickerCard.height = cardHeight
+    m.serverPicker.numRows = rowCount
 end sub
 
 sub ShowKeyboard()

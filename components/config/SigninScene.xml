@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="SigninScene" extends="JFScreen">
   <children>
+    <JellyfishBackground />
+    <Poster id="brandLogo" uri="pkg:/images/brand/logo-gradient.png" width="84" height="82" translation="[150,56]" />
+    <Text id="brandName" text="Jellyfin" font="font:LargeBoldSystemFont" color="#ffffff" translation="[256,66]" />
+
     <Text
       text="Sign In"
       horizAlign="center"
@@ -9,13 +13,15 @@
       width="1920"
       translation="[0, 100]" />
 
-    <Poster uri="pkg:/images/baseline_person_white_48dp.png" id="overlayCurrentUserProfileImage" width="256" height="256" loadDisplayMode="scaleToZoom" translation="[832, 190]" />
+    <Poster id="avatarRing" uri="pkg:/images/brand/avatar-ring.png" width="300" height="300" translation="[810, 168]" />
+    <Poster uri="pkg:/images/baseline_person_white_48dp.png" id="overlayCurrentUserProfileImage" width="170" height="170" loadDisplayMode="scaleToZoom" translation="[875, 233]" />
 
     <Rectangle id="errorContainer" visible="false" width="600" height="60" translation="[660, 386]">
       <Text id="errorMessage" text="" wrap="true" width="600" font="font:MediumSystemFont" horizAlign="center" translation="[10, 15]" />
     </Rectangle>
 
-    <Rectangle id="signInFormContainer" color="#101420" width="870" height="280" translation="[525, 466]">
+    <Rectangle id="signInFormContainer" color="0x00000000" width="870" height="280" translation="[525, 466]">
+      <Poster uri="pkg:/images/brand/card.9.png" width="870" height="280" />
       <FormList id="configOptions" translation="[60, 40]" itemSpacing="[0, 50]" />
     </Rectangle>
 

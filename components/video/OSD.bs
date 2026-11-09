@@ -44,6 +44,7 @@ sub init()
     m.videoEndingTime = m.top.findNode("videoEndingTime")
     m.progressBar = m.top.findNode("progressBar")
     m.progressBarBackground = m.top.findNode("progressBarBackground")
+    m.bufferBar = m.top.findNode("bufferBar")
 
     m.progressBarGroup = m.top.findNode("progressBarGroup")
     m.scrubber = m.top.findNode("scrubber")
@@ -84,18 +85,18 @@ sub init()
     m.videoControls.getChild(m.top.defaultButtonIndex).focus = true
     m.deviceInfo = CreateObject("roDeviceInfo")
 
-    m.progressBarBackground.color = ColorPalette.BLACK77
-    m.progressBar.color = ColorPalette.TRIADBLUE
+    m.progressBarBackground.color = "0xFFFFFF30"
+    m.progressBar.color = "#00A4DC"
 
     optionButtons = m.optionControls.getChildren(-1, 0)
     for each button in optionButtons
-        button.background = ColorPalette.DARKGREY
+        button.background = "0xFFFFFF26"
         button.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
     end for
 
     videoButtons = m.videoControls.getChildren(-1, 0)
     for each button in videoButtons
-        button.background = ColorPalette.DARKGREY
+        button.background = "0xFFFFFF26"
         button.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
     end for
 
@@ -105,6 +106,20 @@ sub init()
     m.top.liveTvRewindLimit = LIVETV_REWIND_LIMIT
     reloadUI()
     onTransportButtonStatusChanged()
+end sub
+
+' onBufferedSecondsChanged: faixa clara mostrando ate onde o filme ja foi baixado.
+' E acumulada pelo VideoPlayerView a partir dos segmentos recebidos.
+sub onBufferedSecondsChanged()
+    duration = m.top.progressDuration
+    if duration <= 0
+        m.bufferBar.width = 0
+        return
+    end if
+    ratio = m.top.bufferedSeconds / duration
+    if ratio > 1 then ratio = 1
+    if ratio < 0 then ratio = 0
+    m.bufferBar.width = Int(m.progressBarBackground.width * ratio)
 end sub
 
 ' onProgressPercentageChanged: Handler for changes to m.top.progressPercentage param
@@ -726,6 +741,9 @@ sub updateProgressBar(live as boolean, updatePosition as integer)
         end if
         scrubberOldPositionTrans = (m.progressBarBackground.width * ((m.top.recordingOffset + scrubberOldPositionTime) / m.top.liveTvRewindLimit)) - m.scrubberOldPosition.width / 2
     else
+        ' Sem duracao (conteudo recem-trocado) nao ha barra para calcular; a divisao
+        ' por zero abre o debugger e congela o app numa tela preta.
+        if m.top.progressDuration <= 0 then return
         ' If we are actively seeking then use the preview position to update the progress bar, otherwise use the current position
         if m.top.isSeeking
             m.videoRemainingTime.text = secondsToHuman(m.top.progressDuration - updatePosition, true)

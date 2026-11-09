@@ -1,0 +1,110 @@
+' Matematica pura do modo Explorar. Sem nos nem estado global: recebe e devolve
+' valores, para poder ser conferida isoladamente.
+'
+' Uma "regiao" e { x, y, w, h } em fracoes do quadro do filme (0..1). w = h = 1/zoom,
+' entao o recorte tem a mesma proporcao do filme. A foto da regiao e pedida ao
+' servico de quadros e desenhada no "palco" (retangulo onde o quadro cabe na tela).
+
+function exploreScreenSize() as object
+    return { w: 1920, h: 1080 }
+end function
+
+function exploreZoomSteps() as object
+    return [1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0]
+end function
+
+function exploreClamp(value as float, low as float, high as float) as float
+    if value < low then return low
+    if value > high then return high
+    return value
+end function
+
+' Palco: o quadro (frameWidth x frameHeight) ajustado dentro da tela, centralizado.
+function exploreStage(frameWidth as float, frameHeight as float) as object
+    screen = exploreScreenSize()
+    if frameWidth <= 0 or frameHeight <= 0 then return { x: 0, y: 0, w: screen.w, h: screen.h }
+    scale = screen.w / frameWidth
+    if screen.h / frameHeight < scale then scale = screen.h / frameHeight
+    stageW = Int(frameWidth * scale)
+    stageH = Int(frameHeight * scale)
+    return { x: Int((screen.w - stageW) / 2), y: Int((screen.h - stageH) / 2), w: stageW, h: stageH }
+end function
+
+function exploreFullRegion() as object
+    return { x: 0.0, y: 0.0, w: 1.0, h: 1.0 }
+end function
+
+' Mantem a regiao dentro do quadro.
+function exploreClampRegion(region as object) as object
+    return {
+        x: exploreClamp(region.x, 0, 1 - region.w),
+        y: exploreClamp(region.y, 0, 1 - region.h),
+        w: region.w,
+        h: region.h
+    }
+end function
+
+' Troca o zoom mantendo sob a mira o mesmo ponto do quadro. (u, v) = posicao da
+' mira dentro da imagem exibida, 0..1.
+function exploreRegionZoomAt(region as object, u as float, v as float, newZoom as float) as object
+    size = 1.0 / newZoom
+    focusX = region.x + u * region.w
+    focusY = region.y + v * region.h
+    return exploreClampRegion({ x: focusX - u * size, y: focusY - v * size, w: size, h: size })
+end function
+
+' Desloca a regiao; du/dv em fracao da imagem exibida (0.1 = 10% da largura vista).
+function exploreRegionPan(region as object, du as float, dv as float) as object
+    return exploreClampRegion({ x: region.x + du * region.w, y: region.y + dv * region.h, w: region.w, h: region.h })
+end function
+
+' Quadrante 0 = sup. esq., 1 = sup. dir., 2 = inf. esq., 3 = inf. dir. (zoom 2x).
+function exploreQuadrantRegion(quadrant as integer) as object
+    column = quadrant mod 2
+    row = Int(quadrant / 2)
+    return { x: column * 0.5, y: row * 0.5, w: 0.5, h: 0.5 }
+end function
+
+' Onde desenhar a foto ANTIGA para simular a regiao nova enquanto a nitida carrega.
+function explorePreviewRect(oldRegion as object, newRegion as object, stage as object) as object
+    return {
+        x: stage.x + stage.w * (oldRegion.x - newRegion.x) / newRegion.w,
+        y: stage.y + stage.h * (oldRegion.y - newRegion.y) / newRegion.h,
+        w: stage.w * oldRegion.w / newRegion.w,
+        h: stage.h * oldRegion.h / newRegion.h
+    }
+end function
+
+' Proximo degrau de zoom: direction = +1 aproxima, -1 afasta (de 1x a 8x).
+function exploreNextZoom(current as float, direction as integer) as float
+    steps = exploreZoomSteps()
+    index = 0
+    for i = 0 to steps.count() - 1
+        if steps[i] <= current + 0.001 then index = i
+    end for
+    index += direction
+    if index < 0 then index = 0
+    if index > steps.count() - 1 then index = steps.count() - 1
+    return steps[index]
+end function
+
+' Pixels nativos do recorte: o que o zoom REALMENTE tem de detalhe. Um recorte
+' 4x num quadro 4K (3840x2160) tem so 960x540 de origem, esticados ate a tela.
+function exploreSourceCrop(videoWidth as float, videoHeight as float, region as object) as object
+    width = Int(videoWidth * region.w + 0.5)
+    height = Int(videoHeight * region.h + 0.5)
+    if width < 1 then width = 1
+    if height < 1 then height = 1
+    return { w: width, h: height }
+end function
+
+' Move a selecao de quadrante pelas setas, sem sair da grade 2x2.
+function exploreMoveQuadrant(quadrant as integer, key as string) as integer
+    column = quadrant mod 2
+    row = Int(quadrant / 2)
+    if key = "left" and column > 0 then column -= 1
+    if key = "right" and column < 1 then column += 1
+    if key = "up" and row > 0 then row -= 1
+    if key = "down" and row < 1 then row += 1
+    return row * 2 + column
+end function

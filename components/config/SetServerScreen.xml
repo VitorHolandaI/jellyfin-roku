@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="SetServerScreen" extends="JFScreen">
   <children>
-    <LayoutGroup translation="[150,150]" itemSpacings="40">
+    <AuroraBackground />
+    <Poster id="brandLogo" uri="pkg:/images/brand/logo-gradient.png" width="84" height="82" translation="[150,56]" />
+    <Text id="brandName" text="Jellyfin" font="font:LargeBoldSystemFont" color="#ffffff" translation="[256,66]" />
+    <AuroraSonar id="sonar" translation="[1480,-10]" visible="false" />
+
+    <LayoutGroup translation="[150,190]" itemSpacings="34">
       <LayoutGroup>
-        <Text text="Connect to Server" id="prompt" font="font:LargeBoldSystemFont" />
+        <Text text="Connect to Server" id="prompt" font="font:MediumBoldSystemFont" color="#d3a6e6" />
       </LayoutGroup>
 
-      <Rectangle id="serverPickerContainer" color="#101420" width="1620" height="400">
+      <Rectangle id="serverPickerContainer" color="0x00000000" width="1620" height="360">
+        <Poster id="serverPickerCard" uri="pkg:/images/brand/card.9.png" width="1620" height="360" />
         <MarkupList
           id="serverPicker"
           translation="[20, 20]"
@@ -19,7 +25,7 @@
           vertFocusAnimationStyle="floatingFocus" />
       </Rectangle>
 
-      <Text text="...or enter server URL manually:" translation="[0, 690]" />
+      <Text id="manualHint" text="...or enter server URL manually:" font="font:SmallSystemFont" color="#9aa4c4" translation="[0, 690]" />
 
       <Rectangle id="serverUrlContainer">
         <TextEditBox id="serverUrlTextbox" hintText="e.g. 192.168.1.100:8096 or https://example.com/jellyfin" />

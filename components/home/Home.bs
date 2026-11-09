@@ -43,15 +43,20 @@ sub refresh()
 end sub
 
 sub setButtonColors()
+    m.homeRows.observeField("rowItemFocused", "onHeroItemFocused")
+    m.overviewCache = {}
+    m.heroItemId = ""
+    m.heroTimer = m.top.findNode("heroTimer")
+    m.heroTimer.observeField("fire", "onHeroTimerFired")
     m.searchButton = m.top.findNode("searchButton")
     m.searchButton.textColor = ColorPalette.WHITE
-    m.searchButton.background = ColorPalette.DARKGREY
+    m.searchButton.background = "0xFFFFFF26"
     m.searchButton.focusTextColor = ColorPalette.WHITE
     m.searchButton.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
 
     m.settingsButton = m.top.findNode("settingsButton")
     m.settingsButton.textColor = ColorPalette.WHITE
-    m.settingsButton.background = ColorPalette.DARKGREY
+    m.settingsButton.background = "0xFFFFFF26"
     m.settingsButton.focusTextColor = ColorPalette.WHITE
     m.settingsButton.focusBackground = chainLookupReturn(m.global.session, "user.settings.colorCursor", ColorPalette.HIGHLIGHT)
 end sub
@@ -125,6 +130,76 @@ end sub
 sub postFinished()
     m.postTask.unobserveField("responseCode")
     m.postTask.callFunc("empty")
+end sub
+
+' Destaque ao focar um item: backdrop esmaecido atras e titulo/sinopse na
+' faixa livre do topo. Itens sem backdrop mostram so o texto.
+sub onHeroItemFocused()
+    position = m.homeRows.rowItemFocused
+    if not isValidAndNotEmpty(position) then return
+    if not isValid(m.homeRows.content) then return
+    row = m.homeRows.content.getChild(position[0])
+    if not isValid(row) then return
+    item = row.getChild(position[1])
+    if not isValid(item) or not isValid(item.json)
+        hideHero()
+        return
+    end if
+    showHero(item.json)
+end sub
+
+sub showHero(json as object)
+    heroFade = m.top.findNode("heroFade")
+    heroBackdrop = m.top.findNode("heroBackdrop")
+    heroTitle = m.top.findNode("heroTitle")
+    heroOverview = m.top.findNode("heroOverview")
+
+    title = chainLookupReturn(json, "name", "")
+    year = chainLookupReturn(json, "productionyear", invalid)
+    if isValid(year) then title = title + "  (" + year.toStr() + ")"
+    heroTitle.text = title
+    m.heroItemId = chainLookupReturn(json, "id", "")
+    heroOverview.text = ""
+    if m.overviewCache.doesExist(m.heroItemId)
+        heroOverview.text = m.overviewCache[m.heroItemId]
+    else
+        ' espera o foco parar de mudar antes de chamar a API
+        m.heroTimer.control = "stop"
+        m.heroTimer.control = "start"
+    end if
+
+    heroFade.control = AnimationControl.STOP
+    heroBackdrop.uri = ""
+    tags = chainLookupReturn(json, "backdropimagetags", invalid)
+    if isValidAndNotEmpty(tags)
+        params = { maxWidth: "1920", maxHeight: "1080", quality: "60", tag: tags[0] }
+        heroBackdrop.uri = ImageURL(json.id, "Backdrop", params)
+    end if
+    heroFade.control = AnimationControl.START
+end sub
+
+sub onHeroTimerFired()
+    if m.heroItemId = "" then return
+    m.heroTask = CreateObject("roSGNode", "HeroDetailsTask")
+    m.heroTask.itemId = m.heroItemId
+    m.heroTask.observeField("content", "onHeroDetailsLoaded")
+    m.heroTask.control = "RUN"
+end sub
+
+sub onHeroDetailsLoaded(event as object)
+    details = event.getData()
+    if not isValid(details) or not isValid(details.id) then return
+    m.overviewCache[details.id] = details.overview
+    if details.id = m.heroItemId
+        m.top.findNode("heroOverview").text = details.overview
+    end if
+end sub
+
+sub hideHero()
+    m.top.findNode("heroFade").control = AnimationControl.STOP
+    m.top.findNode("heroBackdrop").opacity = 0
+    m.top.findNode("heroTitle").opacity = 0
+    m.top.findNode("heroOverview").opacity = 0
 end sub
 
 sub onRowFocusedChange()
