@@ -170,8 +170,32 @@ class FrameCacheTest(unittest.TestCase):
 
 
 class ClipDurationTest(unittest.TestCase):
-    def test_clip_is_half_a_second(self) -> None:
-        self.assertAlmostEqual(frame_server.CLIP_FRAMES / frame_server.CLIP_FPS, 0.5, places=3)
+    def test_clip_is_a_quarter_second(self) -> None:
+        self.assertAlmostEqual(frame_server.CLIP_FRAMES / frame_server.CLIP_FPS, 0.25, places=3)
+
+
+class EffectiveOutTest(unittest.TestCase):
+    HDR_SOURCE = {"width": 3840, "height": 2160, "transfer": "smpte2084", "primaries": "bt2020"}
+
+    def _params(self, w: float) -> dict:
+        return {"x": 0.0, "y": 0.0, "w": w, "h": w, "out": 3840}
+
+    def test_full_frame_keeps_the_requested_output(self) -> None:
+        self.assertEqual(frame_server.effective_out(self.HDR_SOURCE, self._params(1.0)), 3840)
+
+    def test_four_times_zoom_stops_at_twice_the_native_crop(self) -> None:
+        self.assertEqual(frame_server.effective_out(self.HDR_SOURCE, self._params(0.25)), 1920)
+
+    def test_eight_times_zoom_keeps_a_floor_for_small_crops(self) -> None:
+        self.assertEqual(frame_server.effective_out(self.HDR_SOURCE, self._params(0.125)), 960)
+
+    def test_output_never_grows_above_the_request(self) -> None:
+        fonte_pequena = {"width": 1280, "height": 720, "transfer": "bt709", "primaries": "bt709"}
+        self.assertEqual(frame_server.effective_out(fonte_pequena, self._params(1.0)), 2560)
+
+    def test_headers_report_the_effective_output(self) -> None:
+        headers = frame_server.frame_headers(self.HDR_SOURCE, self._params(0.25))
+        self.assertEqual(headers["X-Output-Px"], "1920x1080")
 
 
 class ParseProbeOutputTest(unittest.TestCase):

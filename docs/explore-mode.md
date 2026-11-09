@@ -61,8 +61,12 @@ pausado no primeiro quadro. O filme e a posicao ficam guardados e voltam ao sair
 4. Testes do servico: `python3 -m unittest test_frame_server` dentro de `tools/frame-server`.
 
 ## Pendente
-- Tempo de troca de zoom: o encode caiu de 2,3 s (96 quadros) para 0,7 s (12 quadros) num
-  4K HDR10 medido com `ffmpeg` no servidor; falta confirmar o tempo total na TV.
+- Tempo de troca de zoom: o encode caiu de 2,3 s (96 quadros) para 0,7 s (12 quadros) e agora
+  deveria ficar perto de 0,4 s com 6 quadros; falta medir o total na TV. Na VM do Proxmox
+  (6 vCPU, sem iGPU) 12 quadros levam 5,4 s e 6 quadros 3,1 s: o custo fixo (abrir arquivo,
+  seek em 4K, escala, init do x265) domina.
+- Saida adaptativa: a largura nunca passa de 2x os pixels nativos do recorte — crop 4x de um
+  4K (960 px) sai em 1920 em vez de 3840, cortando escala e encode sem perda visivel.
 - Cor e nitidez em SDR com o clipe ainda nao foram confirmadas pelo usuario (so HDR).
 - HDR10+ e Dolby Vision nao sao tratados (so PQ e HLG por tag).
 - `hevc_vaapi` foi medido e nao ganhou nada com 12 quadros (0,74 s contra 0,74 s do

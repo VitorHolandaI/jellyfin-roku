@@ -33,11 +33,11 @@ plugin do Jellyfin.
 | `item` | id do item no Jellyfin, so letras e digitos |
 | `t` | segundos, `>= 0` (padrao 0) |
 | `x`, `y`, `w`, `h` | recorte em fracao do quadro (0 a 1); `w` e `h` entre 0.02 e 1; o recorte nao sai do quadro |
-| `out` | largura de saida em px, 320 a 3840 (padrao 1920) |
+| `out` | largura de saida em px, 320 a 3840 (padrao 1920); limitada a 2x os pixels nativos do recorte |
 | `api_key` | token do usuario no Jellyfin |
 
 - `/frame` devolve `image/jpeg` (BT.709 limitado para cheio, sem HDR). `/clip` devolve
-  `video/mp4` de um unico quadro repetido (12 quadros a 24 fps, meio segundo) com
+  `video/mp4` de um unico quadro repetido (6 quadros a 24 fps, um quarto de segundo) com
   `Content-Length` e `Range` (206). SDR sai em H.264 8 bits sem converter a cor; HDR
   (`ffprobe` `color_transfer` = `smpte2084` ou `arib-std-b67`) sai em HEVC 10 bits com tag
   `hvc1` e as tags de cor do proprio filme (`-color_primaries`, `-color_trc`,
@@ -52,7 +52,9 @@ plugin do Jellyfin.
   servido se estiver sob um `--map`, sem `..`. Nao ha escrita em disco alem de um
   diretorio temporario por clipe.
 - Limites: no maximo 2 `ffmpeg` em paralelo; tempo maximo de 15 s por quadro e 30 s por
-  clipe. Um clipe de 0,5 s leva cerca de 0,7 s e pesa ~34 KB. O `ffprobe` (tamanho e cor)
+  clipe. Um clipe de 0,25 s (6 quadros) leva cerca de metade do tempo dos 12 quadros e pesa
+  ~30 KB. A saida nunca passa de 2x os pixels nativos do recorte (crop 4x de um 4K tem
+  960 px de origem, entao a saida fica em 1920 em vez de 3840). O `ffprobe` (tamanho e cor)
   roda uma vez por arquivo e fica em cache.
 
 ## Baixar o quadro no celular (`/qr` e `/save`)

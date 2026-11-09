@@ -33,9 +33,13 @@ MAX_PARALLEL_FFMPEG = 2
 SCALE_COLOR = "flags=lanczos:in_color_matrix=bt709:in_range=tv:out_range=pc,format=yuvj420p"
 MIN_OUT, MAX_OUT = 320, 3840
 CLIP_FPS = 24
-# Meio segundo basta: a TV pausa no primeiro quadro. Cada segundo custa encode;
-# com 96 quadros (4 s) a troca de zoom levava 2,3 s, com 12 leva 0,7 s.
-CLIP_FRAMES = CLIP_FPS // 2
+# Meio segundo bastava; 0,25 s (6 quadros) corta ~40% do encode e a TV ainda
+# pausa no primeiro quadro. Abaixo disso o player pode chegar ao fim antes do pause.
+CLIP_FRAMES = CLIP_FPS // 4
+# Saida nao passa de 2x os pixels nativos do recorte: um crop 4x de um 4K tem
+# 960 px de origem, entao escalar para 3840 e trabalho jogado fora.
+ADAPTIVE_OUT_FACTOR = 2
+ADAPTIVE_OUT_MIN = 960
 MIN_CLIP_BYTES = 1024
 PROBE_ENTRIES = "stream=width,height,color_transfer,color_primaries"
 # Link do QR vive meia hora: da tempo de escanear e baixar sem virar porta aberta.
@@ -158,10 +162,18 @@ def crop_source_px(info: dict, params: dict) -> tuple:
 
 
 def output_px(info: dict, params: dict) -> tuple:
-    """Largura pedida e a altura que o scale=-2 gera (mesma proporcao, par)."""
+    """Largura efetiva e a altura que o scale=-2 gera (mesma proporcao, par)."""
     crop_w, crop_h = crop_source_px(info, params)
-    height = max(2, int(round(params["out"] * crop_h / crop_w / 2)) * 2)
-    return params["out"], height
+    width = effective_out(info, params)
+    height = max(2, int(round(width * crop_h / crop_w / 2)) * 2)
+    return width, height
+
+
+def effective_out(info: dict, params: dict) -> int:
+    """Limita a saida a 2x os pixels nativos: nao escala detalhe que nao existe."""
+    crop_w, _ = crop_source_px(info, params)
+    limite = max(ADAPTIVE_OUT_MIN, crop_w * ADAPTIVE_OUT_FACTOR)
+    return min(params["out"], limite)
 
 
 def frame_headers(info: dict, params: dict) -> dict:
@@ -418,6 +430,7 @@ def make_handler(jellyfin: JellyfinClient, mappings: list, extra_filter: str = "
             jellyfin.check_token(token)
             media_file = map_media_path(jellyfin.item_path(params["item"], token), mappings)
             info = probe_video_info(media_file)
+            params = {**params, "out": effective_out(info, params)}
             key = (kind, extra_filter, str(media_file), round(params["t"], 1), params["x"],
                    params["y"], params["w"], params["h"], params["out"])
             body = cache.get(key)
