@@ -87,6 +87,10 @@ sub init()
     m.explore.observeField("clipUrl", "onExploreClipRequested")
     m.exploreActive = false
     m.exploreRestorePause = false
+    m.playbackModeBadge = m.top.findNode("playbackModeBadge")
+    m.modeBadgeTimer = m.top.findNode("modeBadgeTimer")
+    m.modeBadgeTimer.observeField("fire", "hidePlaybackModeBadge")
+    m.showModeBadge = false
     m.osd.isRecording = false
     m.osd.recordingOffset = 0
     m.castPopup = m.top.findNode("castPopup")
@@ -865,6 +869,7 @@ sub onVideoContentLoaded()
     end if
 
     m.isTranscoded = videoContent[0].isTranscoded
+    updatePlaybackModeBadge(videoContent[0])
     burnInSubtitles = chainLookupReturn(m.global, "session.user.settings.`playback.subs.burnin`", true)
     subtitlesBurnedIn = m.isTranscoded and burnInSubtitles and chainLookupReturn(videoContent[0], "subtitlesBurnedIn", true)
 
@@ -1512,6 +1517,11 @@ sub onState(msg)
     if m.exploreRestorePause and isStringEqual(m.top.state, MediaPlaybackState.PLAYING)
         m.exploreRestorePause = false
         m.top.control = VideoControl.PAUSE
+    end if
+    if m.showModeBadge and isStringEqual(m.top.state, MediaPlaybackState.PLAYING)
+        m.showModeBadge = false
+        m.playbackModeBadge.visible = true
+        m.modeBadgeTimer.control = "start"
     end if
     if isValid(m.captionTask)
         m.captionTask.playerState = m.top.state + m.top.globalCaptionMode
@@ -2806,4 +2816,21 @@ sub restoreFilmAfterExplore(resume as boolean)
     m.LoadMetaDataTask = task
     task.control = TaskControl.RUN
     m.top.control = VideoControl.PLAY
+end sub
+
+' Aviso curto no inicio da reproducao: Direct Play ou Transcode (com o motivo).
+sub updatePlaybackModeBadge(videoContent as object)
+    m.showModeBadge = true
+    if not m.isTranscoded
+        m.playbackModeBadge.text = "Direct Play"
+        return
+    end if
+    motivos = chainLookupReturn(videoContent, "transcodeReasons", [])
+    detalhe = ""
+    if isValid(motivos) and motivos.count() > 0 then detalhe = " (" + motivos[0] + ")"
+    m.playbackModeBadge.text = "Transcode" + detalhe
+end sub
+
+sub hidePlaybackModeBadge()
+    m.playbackModeBadge.visible = false
 end sub
