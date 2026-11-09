@@ -2788,11 +2788,22 @@ sub onExploreExit()
 end sub
 
 ' Reabre o filme na posicao em que o Explorar comecou; sem "resume" pausa ali.
+' O stream antigo morre quando o clipe entra no player, entao nao basta reatribuir
+' o content: recarregamos o item com startingPoint, que e como o app monta a URL.
 sub restoreFilmAfterExplore(resume as boolean)
     saved = m.exploreSaved
-    if saved = invalid or saved.content = invalid then return
-    saved.content.playStart = saved.position
+    if saved = invalid then return
     m.exploreRestorePause = not resume
-    m.top.content = saved.content
+    m.global.queueManager.callFunc("setTopStartingPoint", int(saved.position) * 10000000&)
+    current = m.global.queueManager.callFunc("getCurrentItem")
+    if current = invalid then return
+    task = CreateObject("roSGNode", "LoadVideoContentTask")
+    task.selectedSubtitleIndex = m.top.SelectedSubtitle
+    task.itemId = current.id
+    task.itemType = current.type
+    task.selectedAudioStreamIndex = current.selectedAudioStreamIndex
+    task.observeField("content", "onVideoContentLoaded")
+    m.LoadMetaDataTask = task
+    task.control = TaskControl.RUN
     m.top.control = VideoControl.PLAY
 end sub
